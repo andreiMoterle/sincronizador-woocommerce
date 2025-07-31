@@ -1,0 +1,82 @@
+{
+    "name": "sincronizador/woocommerce",
+    "description": "Plugin WordPress/WooCommerce para sincronização de produtos entre fábrica e lojistas",
+    "type": "wordpress-plugin",
+    "version": "1.0.0",
+    "keywords": [
+        "wordpress",
+        "woocommerce",
+        "sincronização",
+        "api",
+        "ecommerce",
+        "produtos",
+        "lojistas",
+        "fabrica"
+    ],
+    "homepage": "https://github.com/seu-usuario/sincronizador-woocommerce",
+    "license": "GPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "Seu Nome",
+            "email": "seu.email@exemplo.com",
+            "homepage": "https://exemplo.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": ">=7.4",
+        "automattic/woocommerce": "^8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0",
+        "wp-coding-standards/wpcs": "^3.0",
+        "phpstan/phpstan": "^1.0",
+        "roave/security-advisories": "dev-latest"
+    },
+    "autoload": {
+        "psr-4": {
+            "SincronizadorWC\\": "includes/"
+        },
+        "files": [
+            "sincronizador-woocommerce.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SincronizadorWC\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test-coverage": "phpunit --coverage-html coverage",
+        "phpcs": "phpcs --standard=WordPress .",
+        "phpcbf": "phpcbf --standard=WordPress .",
+        "phpstan": "phpstan analyse --level=5 includes/",
+        "security-check": "composer audit",
+        "prepare": [
+            "@composer install --no-dev --optimize-autoloader"
+        ]
+    },
+    "support": {
+        "issues": "https://github.com/seu-usuario/sincronizador-woocommerce/issues",
+        "wiki": "https://github.com/seu-usuario/sincronizador-woocommerce/wiki",
+        "source": "https://github.com/seu-usuario/sincronizador-woocommerce"
+    },
+    "funding": [
+        {
+            "type": "github",
+            "url": "https://github.com/sponsors/seu-usuario"
+        },
+        {
+            "type": "patreon",
+            "url": "https://patreon.com/seu-usuario"
+        }
+    ]
+}

@@ -1,0 +1,415 @@
+/* Admin CSS para Processamento em Lote */
+.sincronizador-batch-progress {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.batch-progress-bar {
+    width: 100%;
+    height: 30px;
+    background: #e0e0e0;
+    border-radius: 15px;
+    overflow: hidden;
+    margin: 10px 0;
+    position: relative;
+}
+
+.batch-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00a32a 0%, #00ba37 100%);
+    border-radius: 15px;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    min-width: 0;
+}
+
+.batch-progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-weight: bold;
+    color: #333;
+    z-index: 2;
+}
+
+.batch-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.batch-stat-item {
+    background: white;
+    padding: 15px;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.batch-stat-number {
+    font-size: 24px;
+    font-weight: bold;
+    color: #00a32a;
+    display: block;
+}
+
+.batch-stat-label {
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 5px;
+}
+
+.batch-controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+}
+
+.batch-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.batch-btn:before {
+    font-family: dashicons;
+    font-size: 16px;
+}
+
+.batch-btn-start {
+    background: #00a32a;
+    color: white;
+}
+
+.batch-btn-start:before {
+    content: '\f464'; /* play */
+}
+
+.batch-btn-start:hover {
+    background: #008a20;
+    color: white;
+}
+
+.batch-btn-pause {
+    background: #ffb900;
+    color: white;
+}
+
+.batch-btn-pause:before {
+    content: '\f448'; /* pause */
+}
+
+.batch-btn-pause:hover {
+    background: #e6a600;
+    color: white;
+}
+
+.batch-btn-stop {
+    background: #d63638;
+    color: white;
+}
+
+.batch-btn-stop:before {
+    content: '\f132'; /* stop */
+}
+
+.batch-btn-stop:hover {
+    background: #b32d2e;
+    color: white;
+}
+
+.batch-btn-retry {
+    background: #2271b1;
+    color: white;
+}
+
+.batch-btn-retry:before {
+    content: '\f463'; /* update */
+}
+
+.batch-btn-retry:hover {
+    background: #135e96;
+    color: white;
+}
+
+.batch-btn:disabled {
+    background: #ccc;
+    color: #666;
+    cursor: not-allowed;
+}
+
+.batch-error-log {
+    background: #fef7f7;
+    border: 1px solid #f5c2c7;
+    border-radius: 4px;
+    padding: 15px;
+    margin-top: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.batch-error-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #f5c2c7;
+    font-size: 13px;
+}
+
+.batch-error-item:last-child {
+    border-bottom: none;
+}
+
+.batch-error-timestamp {
+    color: #666;
+    font-weight: normal;
+}
+
+.batch-error-message {
+    color: #d63638;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+/* Performance Dashboard */
+.performance-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.performance-widget {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.performance-widget h3 {
+    margin: 0 0 15px 0;
+    color: #1d2327;
+    font-size: 16px;
+    border-bottom: 2px solid #00a32a;
+    padding-bottom: 10px;
+}
+
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+}
+
+.metric-item {
+    text-align: center;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.metric-value {
+    font-size: 20px;
+    font-weight: bold;
+    color: #00a32a;
+    display: block;
+}
+
+.metric-label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    margin-top: 5px;
+}
+
+/* Cache Status Widget */
+.cache-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 15px;
+    background: #e7f5e7;
+    border-radius: 4px;
+    margin: 10px 0;
+}
+
+.cache-status.warning {
+    background: #fff8e1;
+}
+
+.cache-status.error {
+    background: #fef7f7;
+}
+
+.cache-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #00a32a;
+    margin-right: 10px;
+}
+
+.cache-status.warning .cache-indicator {
+    background: #ffb900;
+}
+
+.cache-status.error .cache-indicator {
+    background: #d63638;
+}
+
+.cache-controls {
+    display: flex;
+    gap: 5px;
+}
+
+.cache-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    background: #00a32a;
+    color: white;
+    text-transform: uppercase;
+}
+
+.cache-btn:hover {
+    background: #008a20;
+}
+
+.cache-btn.danger {
+    background: #d63638;
+}
+
+.cache-btn.danger:hover {
+    background: #b32d2e;
+}
+
+/* Loader para operações pesadas */
+.batch-processing-loader {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #00a32a;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .batch-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .batch-controls {
+        flex-direction: column;
+    }
+    
+    .batch-btn {
+        justify-content: center;
+    }
+    
+    .performance-dashboard {
+        grid-template-columns: 1fr;
+    }
+    
+    .metric-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Toast notifications para feedback */
+.sincronizador-toast {
+    position: fixed;
+    top: 30px;
+    right: 30px;
+    background: #00a32a;
+    color: white;
+    padding: 15px 20px;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 9999;
+    animation: slideInRight 0.3s ease-out;
+    max-width: 400px;
+}
+
+.sincronizador-toast.error {
+    background: #d63638;
+}
+
+.sincronizador-toast.warning {
+    background: #ffb900;
+}
+
+.sincronizador-toast.info {
+    background: #2271b1;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Filtros avançados */
+.advanced-filters {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-group label {
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #1d2327;
+}
+
+.filter-group select,
+.filter-group input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}

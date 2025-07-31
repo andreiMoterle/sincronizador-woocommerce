@@ -310,15 +310,25 @@ class Sincronizador_WooCommerce {
                 echo '<td><strong>' . esc_html($lojista['nome']) . '</strong></td>';
                 echo '<td><a href="' . esc_url($lojista['url']) . '" target="_blank">' . esc_html($lojista['url']) . '</a></td>';
                 echo '<td><span class="status-' . $lojista['status'] . '">' . ucfirst($lojista['status']) . '</span></td>';
-                echo '<td>' . $lojista['ultima_sync'] . '</td>';
+                
+                // Formatar data da última sincronização
+                $ultima_sync_display = 'Nunca';
+                if (!empty($lojista['ultima_sync']) && $lojista['ultima_sync'] !== 'Nunca') {
+                    $ultima_sync_display = date('d/m/Y, H:i', strtotime($lojista['ultima_sync']));
+                }
+                echo '<td>' . $ultima_sync_display . '</td>';
+                
                 echo '<td>';
                 
                 // Botão Sincronizar Produtos
                 echo '<form method="post" style="display:inline-block; margin-right: 5px;">';
                 echo '<input type="hidden" name="action" value="sync_produtos">';
                 echo '<input type="hidden" name="lojista_id" value="' . $lojista['id'] . '">';
-                echo '<button type="submit" class="button button-primary button-small" title="Sincronizar todos os produtos">🔄 Sincronizar</button>';
+                echo '<button type="submit" class="button button-primary button-small btn-sync" data-lojista-id="' . $lojista['id'] . '" title="Sincronizar todos os produtos">🔄 Sincronizar</button>';
                 echo '</form>';
+                
+                // Botão Testar Conexão
+                echo '<button type="button" class="button button-secondary button-small btn-test-connection" data-lojista-id="' . $lojista['id'] . '" id="btn-test-connection-' . $lojista['id'] . '" title="Testar conexão com a loja" style="margin-right: 5px;">🔗 Testar</button>';
                 
                 // Botão Atualizar
                 echo '<form method="post" style="display:inline-block; margin-right: 5px;">';
@@ -354,14 +364,16 @@ class Sincronizador_WooCommerce {
         // Processar formulário
         if (isset($_POST['submit_lojista'])) {
             $result = $this->save_lojista($_POST);
-            if ($result) {
-                echo '<div class="notice notice-success"><p>Lojista salvo com sucesso!</p></div>';
+            
+            if ($result['success']) {
+                echo '<div class="notice notice-success"><p>' . $result['message'] . '</p></div>';
+                
                 if (!$editing) {
                     // Limpar campos após salvar novo
                     $_POST = array();
                 }
             } else {
-                echo '<div class="notice notice-error"><p>Erro ao salvar lojista. Verifique os dados.</p></div>';
+                echo '<div class="notice notice-error"><p>' . $result['message'] . '</p></div>';
             }
         }
         
@@ -395,13 +407,12 @@ class Sincronizador_WooCommerce {
         echo '</tr>';
         
         echo '<tr>';
-        echo '<th scope="row">Teste de Conexão</th>';
+        echo '<th scope="row">Informações</th>';
         echo '<td>';
         if ($editing) {
-            echo '<button type="button" id="btn-test-connection" class="button" data-lojista-id="' . esc_attr($_GET['edit']) . '">🔄 Testar Conexão</button>';
-            echo '<span id="connection-status" style="margin-left: 10px;"></span>';
+            echo '<p class="description">💡 Use o botão "� Testar" na lista de lojistas para verificar a conexão</p>';
         } else {
-            echo '<p class="description">Salve o lojista primeiro para testar a conexão</p>';
+            echo '<p class="description">� A conexão será testada automaticamente - SÓ SALVA SE CONECTAR!</p>';
         }
         echo '</td>';
         echo '</tr>';
@@ -414,6 +425,17 @@ class Sincronizador_WooCommerce {
         echo '</tr>';
         
         echo '</table>';
+        
+        echo '<div class="notice notice-info inline" style="margin: 15px 0; padding: 10px; background: #e7f3ff; border-left: 4px solid #0073aa;">';
+        echo '<p><strong>� IMPORTANTE: Validação Obrigatória</strong></p>';
+        echo '<ul style="margin: 5px 0 0 20px;">';
+        echo '<li>🔗 A conexão será testada automaticamente ao salvar</li>';
+        echo '<li>✅ O lojista SÓ será salvo se a conexão funcionar</li>';
+        echo '<li>❌ Se não conectar, NÃO será salvo no sistema</li>';
+        echo '<li>🔑 Certifique-se de que a URL seja válida e acessível</li>';
+        echo '<li>🔐 As chaves API devem ter permissões de leitura e escrita</li>';
+        echo '</ul>';
+        echo '</div>';
         
         echo '<p class="submit">';
         echo '<input type="submit" name="submit_lojista" class="button button-primary" value="' . ($editing ? 'Atualizar' : 'Salvar') . ' Lojista" />';
@@ -507,7 +529,7 @@ class Sincronizador_WooCommerce {
         
         if (empty($produtos_fabrica)) {
             error_log('SYNC: Nenhum produto encontrado na fábrica');
-            return 0;
+            return array();
         }
 
         // Obter histórico de envios para salvar produtos sincronizados
@@ -523,10 +545,18 @@ class Sincronizador_WooCommerce {
         $produtos_atualizados = 0;
         $produtos_criados = 0;
         $erros = 0;
+        $resultados = array(); // Array com resultados detalhados
         
         error_log('SYNC: Iniciando sincronização com ' . count($produtos_fabrica) . ' produtos');
         
         foreach ($produtos_fabrica as $produto_fabrica) {
+            $resultado_produto = array(
+                'nome' => $produto_fabrica['name'],
+                'sku' => $produto_fabrica['sku'],
+                'success' => false,
+                'error' => ''
+            );
+            
             try {
                 // 2. Verificar se produto já existe no destino pelo SKU
                 $produto_destino_id = $this->buscar_produto_no_destino($lojista, $produto_fabrica['sku']);
@@ -537,10 +567,13 @@ class Sincronizador_WooCommerce {
                     if ($resultado_id) {
                         $produtos_atualizados++;
                         $produtos_sincronizados++;
+                        $resultado_produto['success'] = true;
+                        $resultado_produto['action'] = 'atualizado';
                         // Salvar no histórico
                         $historico_envios[$lojista_url][$produto_fabrica['id']] = $resultado_id;
                     } else {
                         $erros++;
+                        $resultado_produto['error'] = 'Falha ao atualizar produto';
                     }
                 } else {
                     // Produto não existe - criar
@@ -548,19 +581,25 @@ class Sincronizador_WooCommerce {
                     if ($resultado_id) {
                         $produtos_criados++;
                         $produtos_sincronizados++;
+                        $resultado_produto['success'] = true;
+                        $resultado_produto['action'] = 'criado';
                         // Salvar no histórico
                         $historico_envios[$lojista_url][$produto_fabrica['id']] = $resultado_id;
                     } else {
                         $erros++;
+                        $resultado_produto['error'] = 'Falha ao criar produto';
                     }
                 }
                 
-                error_log("SYNC: Produto {$produto_fabrica['sku']} - " . ($resultado_id ? 'SUCESSO' : 'ERRO'));
+                error_log("SYNC: Produto {$produto_fabrica['sku']} - " . ($resultado_produto['success'] ? 'SUCESSO' : 'ERRO'));
                 
             } catch (Exception $e) {
                 error_log('SYNC ERROR: ' . $e->getMessage());
                 $erros++;
+                $resultado_produto['error'] = $e->getMessage();
             }
+            
+            $resultados[] = $resultado_produto;
         }
 
         // Salvar o histórico de envios atualizado
@@ -571,7 +610,7 @@ class Sincronizador_WooCommerce {
         
         error_log("SYNC CONCLUÍDO: {$produtos_sincronizados} sincronizados ({$produtos_criados} criados, {$produtos_atualizados} atualizados, {$erros} erros)");
         
-        return $produtos_sincronizados;
+        return $resultados; // Retornar array com detalhes de cada produto
     }
     
     /**
@@ -898,6 +937,8 @@ class Sincronizador_WooCommerce {
             'status' => $erros > 0 ? 'parcial' : 'completo'
         );
         
+        error_log("💾 SALVANDO RELATÓRIO: " . json_encode($relatorio));
+        
         $historico = get_option('sincronizador_wc_relatorios_sync', array());
         array_unshift($historico, $relatorio);
         
@@ -906,7 +947,8 @@ class Sincronizador_WooCommerce {
             $historico = array_slice($historico, 0, 50);
         }
         
-        update_option('sincronizador_wc_relatorios_sync', $historico);
+        $resultado = update_option('sincronizador_wc_relatorios_sync', $historico);
+        error_log("💾 RELATÓRIO SALVO: " . ($resultado ? 'SUCESSO' : 'FALHA') . " - Total no histórico: " . count($historico));
         
         // Também adicionar ao histórico simples
         $this->adicionar_historico_sync($lojista_nome, $sincronizados);
@@ -1111,8 +1153,15 @@ class Sincronizador_WooCommerce {
     private function save_lojista($data) {
         $lojistas = get_option('sincronizador_wc_lojistas', array());
         
+        // Calcular próximo ID corretamente
+        $proximo_id = 1;
+        if (!empty($lojistas)) {
+            $ids_existentes = array_column($lojistas, 'id');
+            $proximo_id = max($ids_existentes) + 1;
+        }
+        
         $lojista = array(
-            'id' => isset($data['lojista_id']) && $data['lojista_id'] ? intval($data['lojista_id']) : (count($lojistas) + 1),
+            'id' => isset($data['lojista_id']) && $data['lojista_id'] ? intval($data['lojista_id']) : $proximo_id,
             'nome' => sanitize_text_field($data['nome_loja']),
             'url' => esc_url_raw($data['url_loja']),
             'consumer_key' => sanitize_text_field($data['consumer_key']),
@@ -1122,6 +1171,19 @@ class Sincronizador_WooCommerce {
             'ultima_sync' => 'Nunca',
             'criado_em' => current_time('mysql')
         );
+        
+        // TESTAR CONEXÃO ANTES DE SALVAR - SÓ SALVA SE CONECTAR!
+        $teste_conexao = $this->testar_conexao_lojista_direto($lojista);
+        
+        if (!$teste_conexao['success']) {
+            // Se a conexão falhou, NÃO SALVA e retorna erro
+            return array(
+                'success' => false,
+                'message' => '❌ Conexão falhou! Lojista NÃO foi salvo. ' . $teste_conexao['message']
+            );
+        }
+        
+        // Se chegou até aqui, a conexão funcionou - pode salvar
         
         // Se é edição, atualiza o existente
         if (isset($data['lojista_id']) && $data['lojista_id']) {
@@ -1136,7 +1198,139 @@ class Sincronizador_WooCommerce {
             $lojistas[] = $lojista;
         }
         
-        return update_option('sincronizador_wc_lojistas', $lojistas);
+        $result = update_option('sincronizador_wc_lojistas', $lojistas);
+        
+        // Retornar sucesso com mensagem de conexão OK
+        return $result ? array(
+            'success' => true,
+            'lojista_id' => $lojista['id'],
+            'message' => '✅ Lojista salvo com sucesso! Conexão testada e aprovada.'
+        ) : array(
+            'success' => false,
+            'message' => '❌ Erro interno ao salvar no banco de dados.'
+        );
+    }
+    
+    /**
+     * Obter ID do último lojista cadastrado
+     */
+    private function get_last_lojista_id() {
+        $lojistas = get_option('sincronizador_wc_lojistas', array());
+        if (empty($lojistas)) {
+            return 1;
+        }
+        
+        $ultimo_id = 0;
+        foreach ($lojistas as $lojista) {
+            if ($lojista['id'] > $ultimo_id) {
+                $ultimo_id = $lojista['id'];
+            }
+        }
+        
+        return $ultimo_id;
+    }
+    
+    /**
+     * Testar conexão automaticamente após salvar lojista
+     */
+    /**
+     * Testar conexão diretamente com os dados do lojista (antes de salvar)
+     */
+    private function testar_conexao_lojista_direto($lojista_data) {
+        // Verificar se tem dados necessários
+        if (empty($lojista_data['url']) || empty($lojista_data['consumer_key']) || empty($lojista_data['consumer_secret'])) {
+            return array(
+                'success' => false,
+                'message' => 'Dados incompletos: URL, Consumer Key e Consumer Secret são obrigatórios'
+            );
+        }
+        
+        // Testar conexão real
+        $url = trailingslashit($lojista_data['url']) . 'wp-json/wc/v3/system_status';
+        
+        $response = wp_remote_get($url, array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($lojista_data['consumer_key'] . ':' . $lojista_data['consumer_secret'])
+            ),
+            'timeout' => 10
+        ));
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => 'Erro de conexão: ' . $response->get_error_message()
+            );
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        
+        if ($code === 200) {
+            return array(
+                'success' => true,
+                'message' => 'Conexão testada com sucesso! Loja: ' . $lojista_data['nome']
+            );
+        } else {
+            $body = wp_remote_retrieve_body($response);
+            $error_data = json_decode($body, true);
+            
+            return array(
+                'success' => false,
+                'message' => 'Erro HTTP ' . $code . ': ' . ($error_data['message'] ?? 'Falha na autenticação. Verifique Consumer Key e Consumer Secret.')
+            );
+        }
+    }
+
+    private function testar_conexao_automatica($lojista_id) {
+        $lojista = $this->get_lojista($lojista_id);
+        
+        if (!$lojista) {
+            return array(
+                'success' => false,
+                'message' => 'Lojista não encontrado para teste de conexão'
+            );
+        }
+        
+        // Verificar se tem dados necessários
+        if (empty($lojista['url']) || empty($lojista['consumer_key']) || empty($lojista['consumer_secret'])) {
+            return array(
+                'success' => false,
+                'message' => 'Dados incompletos: URL, Consumer Key e Consumer Secret são obrigatórios'
+            );
+        }
+        
+        // Testar conexão real
+        $url = trailingslashit($lojista['url']) . 'wp-json/wc/v3/system_status';
+        
+        $response = wp_remote_get($url, array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($lojista['consumer_key'] . ':' . $lojista['consumer_secret'])
+            ),
+            'timeout' => 10
+        ));
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => 'Erro de conexão: ' . $response->get_error_message()
+            );
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        
+        if ($code === 200) {
+            return array(
+                'success' => true,
+                'message' => 'Conexão testada com sucesso! Loja: ' . $lojista['nome']
+            );
+        } else {
+            $body = wp_remote_retrieve_body($response);
+            $error_data = json_decode($body, true);
+            
+            return array(
+                'success' => false,
+                'message' => 'Erro HTTP ' . $code . ': ' . ($error_data['message'] ?? 'Falha na autenticação. Verifique Consumer Key e Consumer Secret.')
+            );
+        }
     }
     
     private function delete_lojista($id) {
@@ -1251,6 +1445,7 @@ class Sincronizador_WooCommerce {
         add_action('wp_ajax_sincronizador_wc_get_produtos_sincronizados', array($this, 'ajax_get_produtos_sincronizados'));
         add_action('wp_ajax_sincronizador_wc_sync_vendas', array($this, 'ajax_sync_vendas'));
         add_action('wp_ajax_sincronizador_wc_testar_sync_produto', array($this, 'ajax_testar_sync_produto'));
+        add_action('wp_ajax_sync_produtos', array($this, 'ajax_sync_produtos'));
         
         // Inicializar classes se existirem
         add_action('plugins_loaded', array($this, 'init_classes'));
@@ -1791,13 +1986,20 @@ class Sincronizador_WooCommerce {
         $lojista_id = intval($_POST['lojista_id']);
         $produto_id = intval($_POST['produto_id']);
         
-        $lojistas = get_option('sincronizador_wc_lojistas', array());
+        $lojistas = $this->get_lojistas();
+        $lojista_data = null;
         
-        if (!isset($lojistas[$lojista_id])) {
-            wp_send_json_error('Lojista não encontrado');
+        // Encontrar o lojista pelo ID
+        foreach ($lojistas as $lojista) {
+            if ($lojista['id'] == $lojista_id) {
+                $lojista_data = $lojista;
+                break;
+            }
         }
         
-        $lojista_data = $lojistas[$lojista_id];
+        if (!$lojista_data) {
+            wp_send_json_error('Lojista não encontrado');
+        }
         $produto = wc_get_product($produto_id);
         
         if (!$produto) {
@@ -2150,6 +2352,99 @@ class Sincronizador_WooCommerce {
             'produtos_atualizados' => $produtos_atualizados,
             'erros' => $erros
         );
+    }
+    
+    /**
+     * AJAX: Sincronizar produtos via AJAX
+     */
+    public function ajax_sync_produtos() {
+        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error('Sem permissão');
+        }
+        
+        $lojista_id = intval($_POST['lojista_id']);
+        $start_time = microtime(true);
+        
+        error_log("🔄 AJAX SYNC - Iniciando sincronização para lojista: {$lojista_id}");
+        
+        try {
+            // Executar sincronização
+            $resultado = $this->sync_produtos($lojista_id);
+            $end_time = microtime(true);
+            $tempo_execucao = round($end_time - $start_time, 2);
+            
+            if (is_array($resultado)) {
+                $total = count($resultado);
+                $sucessos = 0;
+                $erros = 0;
+                $criados = 0;
+                $atualizados = 0;
+                $mensagens = array();
+                
+                foreach ($resultado as $produto_result) {
+                    if (isset($produto_result['success']) && $produto_result['success']) {
+                        $sucessos++;
+                        $mensagens[] = "✅ " . $produto_result['nome'];
+                        
+                        // Contar criados vs atualizados
+                        if (isset($produto_result['action'])) {
+                            if ($produto_result['action'] === 'criado') {
+                                $criados++;
+                            } else if ($produto_result['action'] === 'atualizado') {
+                                $atualizados++;
+                            }
+                        }
+                    } else {
+                        $erros++;
+                        $error_msg = isset($produto_result['error']) ? $produto_result['error'] : 'Erro desconhecido';
+                        $mensagens[] = "❌ " . ($produto_result['nome'] ?? 'Produto') . ": " . $error_msg;
+                    }
+                }
+                
+                // Atualizar data da última sincronização se houve sucessos
+                if ($sucessos > 0) {
+                    $this->atualizar_data_sync($lojista_id);
+                }
+                
+                wp_send_json_success(array(
+                    'produtos_sincronizados' => $sucessos,
+                    'produtos_criados' => $criados,
+                    'produtos_atualizados' => $atualizados,
+                    'erros' => $erros,
+                    'tempo' => $tempo_execucao . 's',
+                    'detalhes' => implode('<br>', array_slice($mensagens, 0, 10)) // Máximo 10 itens
+                ));
+            } else {
+                wp_send_json_error('Erro na sincronização: formato de resposta inválido');
+            }
+            
+        } catch (Exception $e) {
+            error_log("❌ AJAX SYNC - Exceção: " . $e->getMessage());
+            wp_send_json_error('Erro interno: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Atualizar data da última sincronização
+     */
+    private function atualizar_data_sync($lojista_id) {
+        $lojistas = get_option('sincronizador_wc_lojistas', array());
+        
+        // Procurar o lojista pelo ID correto
+        foreach ($lojistas as $key => $lojista) {
+            if ($lojista['id'] == $lojista_id) {
+                $lojistas[$key]['ultima_sync'] = current_time('mysql');
+                update_option('sincronizador_wc_lojistas', $lojistas);
+                
+                error_log("📅 Data de sincronização atualizada para lojista {$lojista_id}: " . $lojistas[$key]['ultima_sync']);
+                return true;
+            }
+        }
+        
+        error_log("❌ Lojista {$lojista_id} não encontrado para atualizar data de sync");
+        return false;
     }
 }
 

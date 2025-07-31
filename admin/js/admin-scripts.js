@@ -194,6 +194,54 @@
         });
     }
 
+    function testarConexaoLojista(lojistaId, buttonElement) {
+        const originalText = buttonElement.text();
+        buttonElement.prop("disabled", true).text("🔄 Testando...");
+        
+        console.log('🔗 Testando conexão para lojista ID:', lojistaId);
+        
+        $.post(SincronizadorWC.ajaxurl, {
+            action: "sincronizador_wc_validate_lojista",
+            nonce: SincronizadorWC.nonce,
+            lojista_id: lojistaId
+        })
+        .done(function(response) {
+            console.log('🔗 Resposta do teste de conexão:', response);
+            
+            if (response.success) {
+                const data = response.data || {};
+                showNotice('✅ Conexão OK: ' + data.nome, 'success');
+                buttonElement.removeClass('button-secondary').addClass('button-primary').text('✅ Conectado');
+                
+                // Voltar ao estado original após 3 segundos
+                setTimeout(function() {
+                    buttonElement.removeClass('button-primary').addClass('button-secondary').text(originalText);
+                }, 3000);
+            } else {
+                const errorMessage = (response.data && response.data.message) ? response.data.message : 'Erro na conexão';
+                showNotice('❌ ' + errorMessage, 'error');
+                buttonElement.removeClass('button-secondary').addClass('button-primary').css('background-color', '#dc3232').text('❌ Erro');
+                
+                // Voltar ao estado original após 3 segundos
+                setTimeout(function() {
+                    buttonElement.removeClass('button-primary').addClass('button-secondary').css('background-color', '').text(originalText);
+                }, 3000);
+            }
+        })
+        .fail(function(xhr, status, error) {
+            console.log('💥 Erro ao testar conexão:', xhr, status, error);
+            showNotice('❌ Erro de conexão: ' + error, 'error');
+            buttonElement.text('❌ Erro');
+            
+            setTimeout(function() {
+                buttonElement.text(originalText);
+            }, 3000);
+        })
+        .always(function() {
+            buttonElement.prop("disabled", false);
+        });
+    }
+
     function renderProdutos(produtos) {
         const grid = $("#produtos-grid");
         const paginationContainer = $("#produtos-pagination");
@@ -771,7 +819,7 @@
         // Fechar modais de relatório e progresso
         $(document).on('click', '[data-modal="relatorio"]', function(e) {
             e.preventDefault();
-            $('#modal-relatorio').fadeOut(3000, function() {
+            $('#modal-relatorio').fadeOut(300, function() {
                 $(this).remove();
             });
         });
@@ -786,6 +834,25 @@
         });
         
         // === DELEGAÇÃO DE EVENTOS PARA BOTÕES === //
+        
+        // Botão testar conexão (lista de lojistas)
+        $(document).on('click', '.btn-test-connection', function() {
+            const lojistaId = $(this).data('lojista-id');
+            if (lojistaId) {
+                testarConexaoLojista(lojistaId, $(this));
+            }
+        });
+        
+        // Botão sincronizar (lista de lojistas)
+        $(document).on('click', '.btn-sync', function(e) {
+            e.preventDefault();
+            const lojistaId = $(this).data('lojista-id');
+            const lojistaName = $(this).closest('tr').find('td').first().text().trim();
+            
+            if (lojistaId) {
+                executarSincronizacao(lojistaId, lojistaName);
+            }
+        });
         
         // Botão validar lojista (página de importação)
         $(document).on('click', '#btn-validar-lojista', function() {
@@ -1163,39 +1230,46 @@
         $('#modal-relatorio').remove();
         
         const relatorio = `
-            <div id="modal-relatorio" class="modal-overlay">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3>Relatório de Sincronização</h3>
-                        <button class="modal-close" data-modal="close">&times;</button>
+            <div id="modal-relatorio" class="modal-overlay" style="z-index: 999999 !important;">
+                <div class="modal-content" style="max-width: 600px; margin: 50px auto; background: white; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                    <div class="modal-header" style="padding: 20px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="margin: 0; color: #0073aa;">📊 Relatório de Sincronização</h3>
+                        <button class="modal-close" data-modal="close" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
                     </div>
-                    <div class="modal-body">
-                        <div class="relatorio-resumo">
-                            <div class="resumo-item success">
-                                <span class="resumo-numero">${dados.produtos_sincronizados}</span>
-                                <span class="resumo-label">Produtos Sincronizados</span>
+                    <div class="modal-body" style="padding: 20px;">
+                        <div class="relatorio-resumo" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px;">
+                            <div class="resumo-item success" style="background: #d4edda; padding: 15px; border-radius: 5px; text-align: center; border-left: 4px solid #28a745;">
+                                <span class="resumo-numero" style="display: block; font-size: 24px; font-weight: bold; color: #155724;">${dados.produtos_sincronizados || 0}</span>
+                                <span class="resumo-label" style="font-size: 12px; color: #155724;">Produtos Sincronizados</span>
                             </div>
-                            <div class="resumo-item info">
-                                <span class="resumo-numero">${dados.produtos_criados || 0}</span>
-                                <span class="resumo-label">Produtos Criados</span>
+                            <div class="resumo-item info" style="background: #d1ecf1; padding: 15px; border-radius: 5px; text-align: center; border-left: 4px solid #17a2b8;">
+                                <span class="resumo-numero" style="display: block; font-size: 24px; font-weight: bold; color: #0c5460;">${dados.produtos_criados || 0}</span>
+                                <span class="resumo-label" style="font-size: 12px; color: #0c5460;">Produtos Criados</span>
                             </div>
-                            <div class="resumo-item warning">
-                                <span class="resumo-numero">${dados.produtos_atualizados || 0}</span>
-                                <span class="resumo-label">Produtos Atualizados</span>
+                            <div class="resumo-item warning" style="background: #fff3cd; padding: 15px; border-radius: 5px; text-align: center; border-left: 4px solid #ffc107;">
+                                <span class="resumo-numero" style="display: block; font-size: 24px; font-weight: bold; color: #856404;">${dados.produtos_atualizados || 0}</span>
+                                <span class="resumo-label" style="font-size: 12px; color: #856404;">Produtos Atualizados</span>
                             </div>
-                            <div class="resumo-item error">
-                                <span class="resumo-numero">${dados.erros || 0}</span>
-                                <span class="resumo-label">Erros</span>
+                            <div class="resumo-item error" style="background: #f8d7da; padding: 15px; border-radius: 5px; text-align: center; border-left: 4px solid #dc3545;">
+                                <span class="resumo-numero" style="display: block; font-size: 24px; font-weight: bold; color: #721c24;">${dados.erros || 0}</span>
+                                <span class="resumo-label" style="font-size: 12px; color: #721c24;">Erros</span>
                             </div>
                         </div>
-                        ${dados.detalhes ? '<div class="relatorio-detalhes">' + dados.detalhes + '</div>' : ''}
+                        ${dados.detalhes ? '<div class="relatorio-detalhes" style="background: #f8f9fa; padding: 15px; border-radius: 5px; max-height: 300px; overflow-y: auto;">' + dados.detalhes + '</div>' : ''}
+                        <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd;">
+                            <button class="button button-primary" data-modal="close">✅ Fechar Relatório</button>
+                        </div>
                     </div>
                 </div>
             </div>
         `;
         
         $('body').append(relatorio);
-        $('#modal-relatorio').fadeIn(3000);
+        
+        // Mostrar modal com animação
+        $('#modal-relatorio').hide().fadeIn(500);
+        
+        console.log('📊 Modal de relatório exibido - NÃO VAI FECHAR AUTOMATICAMENTE');
     }
     
     // Event listeners para sincronização
@@ -1216,6 +1290,14 @@
     function executarSincronizacao(lojistaId) {
         console.log('🚀 Iniciando sincronização para lojista:', lojistaId);
         
+        // Verificar se já há uma sincronização em andamento
+        if (window.syncInProgress) {
+            console.log('⚠️ Sincronização já em andamento, ignorando...');
+            return;
+        }
+        
+        window.syncInProgress = true;
+        
         // Limpar modais existentes completamente para evitar duplicatas
         limparModaisOrfaos();
         
@@ -1224,6 +1306,7 @@
         const lojistaName = lojistaRow.find('td:first').text().trim();
         
         if (!lojistaName) {
+            window.syncInProgress = false;
             alert('❌ Lojista não encontrado!');
             return;
         }
@@ -1240,6 +1323,7 @@
             console.log('DEBUG: Validação do lojista:', validationResponse);
             
             if (!validationResponse.success) {
+                window.syncInProgress = false;
                 alert('❌ ' + (validationResponse.data || 'Lojista não configurado corretamente'));
                 return;
             }
@@ -1248,6 +1332,7 @@
             iniciarProcessoSincronizacao(lojistaId, lojistaName);
         })
         .fail(function(xhr, status, error) {
+            window.syncInProgress = false;
             console.error('ERRO na validação do lojista:', {xhr, status, error});
             alert('❌ Erro ao verificar configuração do lojista. Verifique as configurações de API.');
         });
@@ -1270,7 +1355,7 @@
         }, 200);
         
         $.post(SincronizadorWC.ajaxurl, {
-            action: 'sincronizar_produtos',
+            action: 'sync_produtos',
             lojista_id: lojistaId,
             nonce: SincronizadorWC.nonce
         })
@@ -1281,6 +1366,7 @@
             // Completar progresso
             atualizarProgresso(100, 'Sincronização concluída!');
             
+            // AGUARDAR APENAS 500ms para mostrar "100%" e então mostrar relatório
             setTimeout(() => {
                 // Fechar modal de progresso
                 fecharModalProgresso();
@@ -1289,14 +1375,17 @@
                     // Atualizar "Última Sync" na tabela
                     atualizarUltimaSync(lojistaId);
                     
+                    // Mostrar relatório sem fechar automaticamente
                     mostrarRelatorioSync(response.data);
                     
-                    // Não recarregar a página automaticamente
                     console.log('✅ Sincronização concluída com sucesso!');
                 } else {
                     alert('❌ Erro na sincronização: ' + (response.data || 'Erro desconhecido'));
                 }
-            }, 1000);
+                
+                // Liberar flag de sincronização em andamento
+                window.syncInProgress = false;
+            }, 500);
         })
         .fail(function(xhr, status, error) {
             clearInterval(progressInterval);
@@ -1314,42 +1403,51 @@
             }
             
             alert(errorMsg);
+            
+            // Liberar flag de sincronização em andamento
+            window.syncInProgress = false;
         });
     }
 
     // Event listeners globais para controle de modais
     $(document).on('keydown', function(e) {
-        // ESC para fechar modais
+        // ESC para fechar modais - EXCETO modal de relatório
         if (e.keyCode === 27) {
             fecharModalProgresso();
-            $('.modal-relatorio').fadeOut(300, function() {
-                $(this).remove();
-            });
+            // NÃO fechar modal de relatório automaticamente
+            console.log('⚠️ ESC pressionado - Modal de relatório permanece aberto');
         }
     });
     
-    // Clique fora do modal para fechar (apenas para modal de relatório)
+    // Clique fora do modal para fechar - APENAS para modal de progresso
     $(document).on('click', '.modal-overlay', function(e) {
-        if (e.target === this && $(this).attr('id') === 'modal-relatorio') {
-            $(this).fadeOut(300, function() {
-                $(this).remove();
-            });
+        if (e.target === this && $(this).attr('id') !== 'modal-relatorio') {
+            console.log('🔄 Fechando modal de progresso por clique externo');
+            fecharModalProgresso();
         }
     });
     
-    // Botão de fechar modal
-    $(document).on('click', '[data-modal="close"]', function() {
-        const modal = $(this).closest('.modal-overlay');
-        if (modal.attr('id') === 'modal-relatorio') {
-            modal.fadeOut(300, function() {
-                $(this).remove();
-            });
-        }
+    // Botão de fechar modal - ESPECÍFICO para cada tipo
+    $(document).on('click', '[data-modal="close"]', function(e) {
+        e.preventDefault();
+        console.log('✅ Botão fechar clicado no modal de relatório');
+        $('#modal-relatorio').fadeOut(300, function() {
+            $(this).remove();
+            console.log('📊 Modal de relatório fechado pelo usuário');
+        });
     });
 
     // Expor funções globalmente se necessário
     window.SincronizadorWC.showNotice = showNotice;
     window.SincronizadorWC.formatPrice = formatPrice;
     window.SincronizadorWC.limparModaisOrfaos = limparModaisOrfaos;
+    
+    // Função específica para fechar modal de relatório apenas quando usuário clica
+    window.fecharModalRelatorioManual = function() {
+        console.log('🚫 Modal de relatório fechado manualmente pelo usuário');
+        $('#modal-relatorio').fadeOut(300, function() {
+            $(this).remove();
+        });
+    };
 
 })(jQuery);

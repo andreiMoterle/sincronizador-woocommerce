@@ -450,9 +450,18 @@ class Sincronizador_WC_Product_Importer {
         if (!empty($attributes)) {
             $dados['attributes'] = array();
             foreach ($attributes as $attribute) {
+                $options = $attribute->get_options();
+                
+                // Garantir que options é um array de strings
+                if (is_array($options)) {
+                    $options = array_map('strval', $options);
+                } else {
+                    $options = array(strval($options));
+                }
+                
                 $dados['attributes'][] = array(
                     'name' => $attribute->get_name(),
-                    'options' => $attribute->get_options(),
+                    'options' => $options,
                     'visible' => $attribute->get_visible(),
                     'variation' => $attribute->get_variation()
                 );

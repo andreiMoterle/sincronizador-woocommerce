@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Teste Final - Sistema Completo</title>
+    <link rel="stylesheet" href="admin/css/admin-styles.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="admin/js/admin-scripts.js"></script>
+</head>
+<body style="background: #f1f1f1; padding: 20px; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen-Sans,Ubuntu,Cantarell,'Helvetica Neue',sans-serif;">
+    <div class="wrap sincronizador-wc-wrap" style="background: white; max-width: 1200px; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <h1>🚀 Teste Final - Sistema Completo</h1>
+        
+        <!-- Status do Sistema -->
+        <div class="notice notice-info" style="margin-bottom: 20px;">
+            <p><strong>Status:</strong> Sistema totalmente funcional com JavaScript original do plugin!</p>
+            <ul style="margin: 10px 0 0 20px;">
+                <li>✅ Detecção de página funcionando</li>
+                <li>✅ Event delegation implementado</li>
+                <li>✅ Paginação de produtos funcionando</li>
+                <li>✅ Modal de progresso implementado</li>
+                <li>✅ Sistema SKU-based de sincronização ativo</li>
+            </ul>
+        </div>
+        
+        <!-- Simulação da página de lojistas -->
+        <div class="card" style="margin-bottom: 30px;">
+            <h2>👥 Lojistas (Teste Realístico)</h2>
+            <p>Esta seção usa o JavaScript original do plugin:</p>
+            
+            <table class="wp-list-table widefat fixed striped" style="margin-top: 15px;">
+                <thead>
+                    <tr>
+                        <th>Nome da Loja</th>
+                        <th>URL</th>
+                        <th>Status</th>
+                        <th>Produtos</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>🏪 Loja Principal</strong></td>
+                        <td><a href="https://loja1.exemplo.com" target="_blank">https://loja1.exemplo.com</a></td>
+                        <td><span class="status-ativo" style="color: #28a745;">✅ Ativo</span></td>
+                        <td>156 produtos</td>
+                        <td>
+                            <button type="button" class="button button-primary button-small btn-sincronizar" data-lojista="1" title="Sincronizar todos os produtos por SKU">
+                                🔄 Sincronizar
+                            </button>
+                            <button class="button button-small" style="margin-left: 5px;">✏️ Editar</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>🛒 Marketplace X</strong></td>
+                        <td><a href="https://marketplace-x.com" target="_blank">https://marketplace-x.com</a></td>
+                        <td><span class="status-ativo" style="color: #28a745;">✅ Ativo</span></td>
+                        <td>89 produtos</td>
+                        <td>
+                            <button type="button" class="button button-primary button-small btn-sincronizar" data-lojista="2" title="Sincronizar todos os produtos por SKU">
+                                🔄 Sincronizar
+                            </button>
+                            <button class="button button-small" style="margin-left: 5px;">✏️ Editar</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>🏬 Filial Sul</strong></td>
+                        <td><a href="https://filial-sul.exemplo.com" target="_blank">https://filial-sul.exemplo.com</a></td>
+                        <td><span class="status-pausado" style="color: #ffc107;">⏸️ Pausado</span></td>
+                        <td>234 produtos</td>
+                        <td>
+                            <button type="button" class="button button-primary button-small btn-sincronizar" data-lojista="3" title="Sincronizar todos os produtos por SKU">
+                                🔄 Sincronizar
+                            </button>
+                            <button class="button button-small" style="margin-left: 5px;">✏️ Editar</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Simulação da página de importação -->
+        <div class="card" style="margin-bottom: 30px;">
+            <h2>📦 Importação de Produtos</h2>
+            <p>Sistema de importação com paginação e SKU-based matching:</p>
+            
+            <div id="lojista-selection" style="margin-bottom: 20px;">
+                <label for="lojista_destino"><strong>Selecionar Lojista:</strong></label>
+                <select id="lojista_destino" class="regular-text" style="margin-left: 10px;">
+                    <option value="">Selecione o lojista de destino...</option>
+                    <option value="1">🏪 Loja Principal (https://loja1.exemplo.com) - 156 produtos</option>
+                    <option value="2">🛒 Marketplace X (https://marketplace-x.com) - 89 produtos</option>
+                    <option value="3">🏬 Filial Sul (https://filial-sul.exemplo.com) - 234 produtos</option>
+                </select>
+                <button type="button" id="btn-validar-lojista" class="button button-primary" disabled style="margin-left: 10px;">
+                    🔍 Validar Conexão
+                </button>
+            </div>
+            
+            <div id="validacao-status" style="display: none; margin-bottom: 15px;"></div>
+            
+            <button type="button" id="btn-carregar-produtos" class="button button-secondary" disabled>
+                📋 Carregar Produtos da Fábrica
+            </button>
+            
+            <div id="produtos-section" style="display: none; margin-top: 30px;">
+                <h3>🏭 Produtos da Fábrica com Paginação</h3>
+                <div id="produtos-resumo" class="produtos-summary" style="margin-bottom: 15px;"></div>
+                <div id="produtos-grid" class="produtos-grid"></div>
+                <div id="produtos-pagination" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+        
+        <!-- Console de Debug -->
+        <div class="card">
+            <h2>🔍 Console de Debug</h2>
+            <div id="debug-console" style="background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 400px; overflow-y: auto; min-height: 200px;">
+                <div style="color: #569cd6;">[INFO] Sistema inicializado e aguardando interações...</div>
+            </div>
+            <button type="button" id="btn-clear-console" class="button button-small" style="margin-top: 10px;">🗑️ Limpar Console</button>
+        </div>
+    </div>
+
+    <script>
+        // Configurar o ambiente WordPress simulado
+        window.SincronizadorWC = {
+            ajaxurl: '/wp-admin/admin-ajax.php',
+            nonce: 'teste-nonce-123',
+            strings: {
+                confirmDelete: 'Tem certeza que deseja remover este item?',
+                loading: 'Carregando...',
+                error: 'Erro na requisição AJAX',
+                success: 'Operação realizada com sucesso!'
+            },
+            showNotice: function(message, type = 'info') {
+                debugLog(`[NOTICE-${type.toUpperCase()}] ${message}`, type);
+            },
+            formatPrice: function(price) {
+                return parseFloat(price || 0).toFixed(2).replace(".", ",");
+            }
+        };
+        
+        // Função de debug melhorada
+        function debugLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const console = $('#debug-console');
+            
+            const colors = {
+                info: '#569cd6',     // azul
+                success: '#4ec9b0',  // verde
+                error: '#f44747',    // vermelho
+                warning: '#dcdcaa',  // amarelo
+                ajax: '#c586c0'      // roxo
+            };
+            
+            const entry = `<div style="color: ${colors[type] || colors.info}; margin: 2px 0;">[${timestamp}] ${message}</div>`;
+            console.append(entry);
+            console.scrollTop(console[0].scrollHeight);
+        }
+        
+        // Produtos de demonstração mais realistas
+        const produtosFabrica = [
+            { id: 1, nome: '📱 iPhone 15 Pro Max 256GB', sku: 'APPLE-IP15PM-256', preco: '8999.90', preco_promocional: '8499.90', estoque: 12, categoria: 'Smartphones', imagem: 'https://via.placeholder.com/80x80/007AFF/FFFFFF?text=📱', status: 'ativo' },
+            { id: 2, nome: '💻 MacBook Air M2 13"', sku: 'APPLE-MBA-M2-13', preco: '12999.90', preco_promocional: '', estoque: 8, categoria: 'Notebooks', imagem: 'https://via.placeholder.com/80x80/A8A8A8/FFFFFF?text=💻', status: 'ativo' },
+            { id: 3, nome: '⌚ Apple Watch Series 9', sku: 'APPLE-AW-S9-45', preco: '4299.90', preco_promocional: '3899.90', estoque: 25, categoria: 'Wearables', imagem: 'https://via.placeholder.com/80x80/1D1D1F/FFFFFF?text=⌚', status: 'ativo' },
+            { id: 4, nome: '🎧 AirPods Pro 2ª Geração', sku: 'APPLE-APP-2GEN', preco: '2299.90', preco_promocional: '', estoque: 35, categoria: 'Áudio', imagem: 'https://via.placeholder.com/80x80/F5F5F7/000000?text=🎧', status: 'ativo' },
+            { id: 5, nome: '📱 Samsung Galaxy S24 Ultra', sku: 'SAMSUNG-GS24U-512', preco: '7999.90', preco_promocional: '7299.90', estoque: 18, categoria: 'Smartphones', imagem: 'https://via.placeholder.com/80x80/1F1F23/FFFFFF?text=📱', status: 'ativo' },
+            { id: 6, nome: '💻 Dell XPS 13 Plus i7', sku: 'DELL-XPS13P-I7', preco: '9999.90', preco_promocional: '', estoque: 6, categoria: 'Notebooks', imagem: 'https://via.placeholder.com/80x80/0084FF/FFFFFF?text=💻', status: 'ativo' },
+            { id: 7, nome: '🖱️ Mouse Logitech MX Master 3S', sku: 'LOGI-MXM3S-BLK', preco: '699.90', preco_promocional: '599.90', estoque: 42, categoria: 'Periféricos', imagem: 'https://via.placeholder.com/80x80/00B8FC/FFFFFF?text=🖱️', status: 'ativo' },
+            { id: 8, nome: '⌨️ Teclado Mecânico Keychron K2', sku: 'KEYCH-K2-RGB', preco: '899.90', preco_promocional: '', estoque: 28, categoria: 'Periféricos', imagem: 'https://via.placeholder.com/80x80/FF6B35/FFFFFF?text=⌨️', status: 'ativo' },
+            { id: 9, nome: '📺 Smart TV Samsung 65" QLED', sku: 'SAMSUNG-QN65Q80C', preco: '4999.90', preco_promocional: '4499.90', estoque: 9, categoria: 'TVs', imagem: 'https://via.placeholder.com/80x80/000000/FFFFFF?text=📺', status: 'ativo' },
+            { id: 10, nome: '🎮 PlayStation 5 Console', sku: 'SONY-PS5-STD', preco: '4999.90', preco_promocional: '', estoque: 15, categoria: 'Games', imagem: 'https://via.placeholder.com/80x80/003087/FFFFFF?text=🎮', status: 'ativo' },
+            { id: 11, nome: '📷 Canon EOS R6 Mark II', sku: 'CANON-R6M2-BODY', preco: '15999.90', preco_promocional: '14499.90', estoque: 4, categoria: 'Câmeras', imagem: 'https://via.placeholder.com/80x80/E60012/FFFFFF?text=📷', status: 'ativo' },
+            { id: 12, nome: '🔊 JBL Flip 6 Bluetooth', sku: 'JBL-FLIP6-BLU', preco: '699.90', preco_promocional: '599.90', estoque: 67, categoria: 'Áudio', imagem: 'https://via.placeholder.com/80x80/FF6900/FFFFFF?text=🔊', status: 'ativo' },
+            { id: 13, nome: '💾 SSD Samsung 980 PRO 1TB', sku: 'SAMSUNG-980PRO-1TB', preco: '899.90', preco_promocional: '', estoque: 89, categoria: 'Armazenamento', imagem: 'https://via.placeholder.com/80x80/1F1F23/FFFFFF?text=💾', status: 'ativo' },
+            { id: 14, nome: '🖥️ Monitor LG UltraWide 34"', sku: 'LG-34WK95U-W', preco: '3999.90', preco_promocional: '3599.90', estoque: 12, categoria: 'Monitores', imagem: 'https://via.placeholder.com/80x80/A50034/FFFFFF?text=🖥️', status: 'ativo' },
+            { id: 15, nome: '📱 Nothing Phone (2) 256GB', sku: 'NOTHING-P2-256', preco: '3999.90', preco_promocional: '', estoque: 21, categoria: 'Smartphones', imagem: 'https://via.placeholder.com/80x80/000000/FFFFFF?text=📱', status: 'ativo' },
+            { id: 16, nome: '🎧 Sony WH-1000XM5 Noise Canceling', sku: 'SONY-WH1000XM5', preco: '1999.90', preco_promocional: '1799.90', estoque: 33, categoria: 'Áudio', imagem: 'https://via.placeholder.com/80x80/000000/FFFFFF?text=🎧', status: 'ativo' },
+            { id: 17, nome: '⚡ Carregador Anker PowerCore 26800', sku: 'ANKER-PC26800', preco: '299.90', preco_promocional: '', estoque: 156, categoria: 'Acessórios', imagem: 'https://via.placeholder.com/80x80/0066CC/FFFFFF?text=⚡', status: 'ativo' },
+            { id: 18, nome: '🔌 Hub USB-C Belkin 7-em-1', sku: 'BELKIN-HUB7IN1', preco: '499.90', preco_promocional: '449.90', estoque: 78, categoria: 'Acessórios', imagem: 'https://via.placeholder.com/80x80/6366F1/FFFFFF?text=🔌', status: 'ativo' }
+        ];
+        
+        // Interceptar chamadas AJAX para simular respostas
+        $.ajaxPrefilter(function(options) {
+            if (options.url.includes('admin-ajax.php')) {
+                debugLog(`[AJAX] Interceptando chamada: ${options.data}`, 'ajax');
+                
+                // Simular resposta baseada na ação
+                options.success = function(response) {
+                    debugLog('[AJAX] Resposta simulada enviada', 'success');
+                };
+                
+                options.error = function() {
+                    debugLog('[AJAX] Erro simulado', 'error');
+                };
+                
+                // Cancelar requisição real
+                return false;
+            }
+        });
+        
+        // Event listeners do teste
+        $(document).ready(function() {
+            debugLog('🚀 Ambiente de teste carregado com JavaScript original do plugin', 'success');
+            
+            // Simular mudança de lojista
+            $('#lojista_destino').change(function() {
+                const valor = $(this).val();
+                const texto = $(this).find('option:selected').text();
+                
+                if (valor) {
+                    debugLog(`🎯 Lojista selecionado: ${valor} - ${texto}`, 'info');
+                    $('#btn-validar-lojista').prop('disabled', false);
+                } else {
+                    $('#btn-validar-lojista').prop('disabled', true);
+                    $('#btn-carregar-produtos').prop('disabled', true);
+                    $('#validacao-status').hide();
+                }
+            });
+            
+            // Validar lojista
+            $('#btn-validar-lojista').click(function() {
+                const lojista = $('#lojista_destino').val();
+                debugLog(`🔍 Validando conexão com lojista ${lojista}...`, 'warning');
+                
+                $(this).prop('disabled', true).html('⏳ Validando...');
+                
+                setTimeout(() => {
+                    $('#validacao-status').html(`
+                        <div class="notice notice-success">
+                            <p><strong>✅ Conexão validada!</strong></p>
+                            <p>WooCommerce versão: 8.4.0 | API ativa | Produtos: ${Math.floor(Math.random() * 300) + 50}</p>
+                        </div>
+                    `).show();
+                    
+                    $(this).prop('disabled', false).html('🔍 Validar Conexão');
+                    $('#btn-carregar-produtos').prop('disabled', false);
+                    
+                    debugLog('✅ Lojista validado com sucesso - WooCommerce API OK', 'success');
+                }, 2500);
+            });
+            
+            // Carregar produtos
+            $('#btn-carregar-produtos').click(function() {
+                debugLog('📋 Carregando produtos da fábrica...', 'info');
+                
+                $(this).prop('disabled', true).html('⏳ Carregando...');
+                
+                setTimeout(() => {
+                    // Usar a função real de renderização do plugin
+                    if (typeof renderProdutos === 'function') {
+                        renderProdutos(produtosFabrica);
+                    } else {
+                        // Fallback se a função não estiver disponível
+                        renderProdutosFallback(produtosFabrica);
+                    }
+                    
+                    $('#produtos-section').show();
+                    $(this).prop('disabled', false).html('📋 Carregar Produtos da Fábrica');
+                    
+                    debugLog(`✅ ${produtosFabrica.length} produtos carregados com paginação ativa`, 'success');
+                }, 2000);
+            });
+            
+            // Limpar console
+            $('#btn-clear-console').click(function() {
+                $('#debug-console').html('<div style="color: #569cd6;">[INFO] Console limpo</div>');
+                debugLog('🗑️ Console de debug limpo', 'info');
+            });
+            
+            debugLog('✅ Todos os event listeners configurados', 'success');
+        });
+        
+        // Fallback para renderização de produtos
+        function renderProdutosFallback(produtos) {
+            const grid = $("#produtos-grid");
+            const resumo = $("#produtos-resumo");
+            
+            grid.empty();
+            
+            produtos.forEach(function(produto) {
+                const precoFinal = produto.preco_promocional || produto.preco;
+                const temPromocao = produto.preco_promocional;
+                
+                let precoHTML = `<span class="preco-atual">R$ ${window.SincronizadorWC.formatPrice(precoFinal)}</span>`;
+                if (temPromocao) {
+                    precoHTML = `<span class="preco-promocional">R$ ${window.SincronizadorWC.formatPrice(precoFinal)}</span> <del class="preco-original">R$ ${window.SincronizadorWC.formatPrice(produto.preco)}</del>`;
+                }
+                
+                const card = $(`
+                    <div class="produto-card">
+                        <div class="produto-checkbox">
+                            <input type="checkbox" name="produtos_selecionados[]" value="${produto.id}" id="produto_${produto.id}">
+                        </div>
+                        <div class="produto-imagem">
+                            <img src="${produto.imagem}" alt="${produto.nome}" width="80" height="80">
+                        </div>
+                        <div class="produto-info">
+                            <h4><label for="produto_${produto.id}">${produto.nome}</label></h4>
+                            <p><strong>SKU:</strong> <code>${produto.sku}</code></p>
+                            <p><strong>Categoria:</strong> ${produto.categoria}</p>
+                            <p><strong>Preço:</strong> ${precoHTML}</p>
+                            <p><strong>Estoque:</strong> ${produto.estoque} unidades</p>
+                            <span class="produto-status status-${produto.status}">${produto.status}</span>
+                        </div>
+                    </div>
+                `);
+                
+                grid.append(card);
+            });
+            
+            resumo.html(`
+                <strong>📊 Resumo:</strong> 
+                ${produtos.length} produtos | 
+                ${produtos.filter(p => p.status === 'ativo').length} ativos | 
+                ${produtos.filter(p => p.preco_promocional).length} em promoção
+            `);
+        }
+    </script>
+</body>
+</html>

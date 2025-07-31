@@ -49,22 +49,71 @@
     });
 
     function initSincronizador() {
-        // Inicializar diferentes páginas
-        if ($('#lojista_destino').length) {
-            initImportPage();
+        // Detectar qual página estamos
+        const currentPage = detectCurrentPage();
+        console.log('📍 Página atual detectada:', currentPage);
+        
+        // Inicializar baseado na página
+        switch(currentPage) {
+            case 'importar':
+                console.log('📦 Inicializando página de importação');
+                if ($('#lojista_destino').length) {
+                    initImportPage();
+                }
+                break;
+            case 'sincronizados':
+                console.log('📊 Inicializando página de produtos sincronizados');
+                if ($('#tabela-sincronizados').length) {
+                    initSyncPage();
+                }
+                break;
+            case 'lojistas':
+                console.log('👥 Inicializando página de lojistas');
+                initLojistasPage();
+                break;
+            case 'add-lojista':
+                console.log('➕ Inicializando página de adicionar lojista');
+                if ($('#btn-test-connection').length) {
+                    initConnectionTest();
+                }
+                break;
+            default:
+                console.log('🏠 Página padrão ou dashboard');
         }
         
-        if ($('#tabela-sincronizados').length) {
-            initSyncPage();
-        }
-        
-        // Inicializar teste de conexão
-        if ($('#btn-test-connection').length) {
-            initConnectionTest();
-        }
-        
-        // Eventos globais
+        // Eventos globais que funcionam em todas as páginas
         initGlobalEvents();
+    }
+    
+    function detectCurrentPage() {
+        const url = window.location.href;
+        
+        if (url.includes('sincronizador-wc-importar')) return 'importar';
+        if (url.includes('sincronizador-wc-sincronizados')) return 'sincronizados';
+        if (url.includes('sincronizador-wc-add-lojista')) return 'add-lojista';
+        if (url.includes('sincronizador-wc-lojistas')) return 'lojistas';
+        
+        return 'dashboard';
+    }
+    
+    function initLojistasPage() {
+        console.log('👥 Configurando página de lojistas...');
+        
+        // Contar lojistas na página
+        const totalLojistas = $('table.wp-list-table tbody tr').length;
+        console.log('📊 Total de lojistas encontrados:', totalLojistas);
+        
+        // Adicionar data-lojista aos botões de sincronização
+        $('form input[name="action"][value="sync_produtos"]').each(function() {
+            const form = $(this).closest('form');
+            const lojistaId = form.find('input[name="lojista_id"]').val();
+            const submitBtn = form.find('button[type="submit"]');
+            
+            if (lojistaId && submitBtn.length) {
+                submitBtn.addClass('btn-sincronizar').attr('data-lojista', lojistaId);
+                console.log('✅ Botão configurado para lojista:', lojistaId);
+            }
+        });
     }
 
     // === PÁGINA DE IMPORTAÇÃO === //
@@ -137,44 +186,127 @@
 
     function renderProdutos(produtos) {
         const grid = $("#produtos-grid");
+        const paginationContainer = $("#produtos-pagination");
+        
         grid.empty();
+        paginationContainer.empty();
         
         if (produtos.length === 0) {
             grid.html('<p class="text-center">Nenhum produto encontrado</p>');
             return;
         }
         
-        produtos.forEach(function(produto) {
-            const isDisabled = produto.status !== "ativo";
-            const card = $(`
-                <div class="produto-card ${isDisabled ? 'disabled' : ''}" 
-                     data-categoria="${produto.categoria}" 
-                     data-status="${produto.status}">
-                    <div class="produto-checkbox">
-                        <input type="checkbox" 
-                               name="produtos_selecionados[]" 
-                               value="${produto.id}" 
-                               id="produto_${produto.id}"
-                               ${isDisabled ? 'disabled' : ''}>
-                    </div>
-                    <div class="produto-imagem">
-                        <img src="${produto.imagem}" 
-                             alt="${produto.nome}" 
-                             width="80" height="80">
-                    </div>
-                    <div class="produto-info">
-                        <h4><label for="produto_${produto.id}">${produto.nome}</label></h4>
-                        <p><strong>SKU:</strong> ${produto.sku}</p>
-                        <p><strong>Categoria:</strong> ${produto.categoria}</p>
-                        <p><strong>Preço:</strong> R$ ${formatPrice(produto.preco)}</p>
-                        <p><strong>Estoque:</strong> ${produto.estoque} unidades</p>
-                        <span class="produto-status status-${produto.status}">${produto.status}</span>
-                    </div>
-                </div>
-            `);
+        // Configurações de paginação
+        const produtosPorPagina = 12;
+        const totalPaginas = Math.ceil(produtos.length / produtosPorPagina);
+        let paginaAtual = 1;
+        
+        function renderPagina(pagina) {
+            grid.empty();
             
-            grid.append(card);
-        });
+            const inicio = (pagina - 1) * produtosPorPagina;
+            const fim = inicio + produtosPorPagina;
+            const produtosPagina = produtos.slice(inicio, fim);
+            
+            produtosPagina.forEach(function(produto) {
+                const isDisabled = produto.status !== "ativo";
+                const precoFinal = produto.preco_promocional ? produto.preco_promocional : produto.preco;
+                const precoOriginal = produto.preco_promocional ? produto.preco : '';
+                
+                let precoHTML = `<span class="preco-atual">R$ ${formatPrice(precoFinal)}</span>`;
+                if (precoOriginal) {
+                    precoHTML += ` <del class="preco-original">R$ ${formatPrice(precoOriginal)}</del>`;
+                }
+                
+                const card = $(`
+                    <div class="produto-card ${isDisabled ? 'disabled' : ''}" 
+                         data-categoria="${produto.categoria}" 
+                         data-status="${produto.status}">
+                        <div class="produto-checkbox">
+                            <input type="checkbox" 
+                                   name="produtos_selecionados[]" 
+                                   value="${produto.id}" 
+                                   id="produto_${produto.id}"
+                                   ${isDisabled ? 'disabled' : ''}>
+                        </div>
+                        <div class="produto-imagem">
+                            <img src="${produto.imagem}" 
+                                 alt="${produto.nome}" 
+                                 width="80" height="80">
+                        </div>
+                        <div class="produto-info">
+                            <h4><label for="produto_${produto.id}">${produto.nome}</label></h4>
+                            <p><strong>SKU:</strong> ${produto.sku}</p>
+                            <p><strong>Categoria:</strong> ${produto.categoria}</p>
+                            <p><strong>Preço:</strong> ${precoHTML}</p>
+                            <p><strong>Estoque:</strong> ${produto.estoque} unidades</p>
+                            <span class="produto-status status-${produto.status}">${produto.status}</span>
+                        </div>
+                    </div>
+                `);
+                
+                grid.append(card);
+            });
+            
+            // Atualizar controles de paginação
+            renderPaginationControls(pagina, totalPaginas);
+        }
+        
+        function renderPaginationControls(pagina, total) {
+            if (total <= 1) return;
+            
+            let paginationHTML = `
+                <div class="pagination-info">
+                    Mostrando ${((pagina - 1) * produtosPorPagina) + 1}-${Math.min(pagina * produtosPorPagina, produtos.length)} de ${produtos.length} produtos
+                </div>
+                <div class="pagination-controls">
+            `;
+            
+            // Botão anterior
+            if (pagina > 1) {
+                paginationHTML += `<button class="button pagination-btn" data-page="${pagina - 1}">‹ Anterior</button>`;
+            }
+            
+            // Números das páginas
+            for (let i = 1; i <= total; i++) {
+                if (i === pagina) {
+                    paginationHTML += `<button class="button button-primary pagination-btn" data-page="${i}">${i}</button>`;
+                } else if (i === 1 || i === total || (i >= pagina - 2 && i <= pagina + 2)) {
+                    paginationHTML += `<button class="button pagination-btn" data-page="${i}">${i}</button>`;
+                } else if (i === pagina - 3 || i === pagina + 3) {
+                    paginationHTML += `<span class="pagination-dots">...</span>`;
+                }
+            }
+            
+            // Botão próximo
+            if (pagina < total) {
+                paginationHTML += `<button class="button pagination-btn" data-page="${pagina + 1}">Próximo ›</button>`;
+            }
+            
+            paginationHTML += '</div>';
+            
+            paginationContainer.html(paginationHTML);
+            
+            // Event listeners para paginação
+            paginationContainer.find('.pagination-btn').on('click', function() {
+                const novaPagina = parseInt($(this).data('page'));
+                paginaAtual = novaPagina;
+                renderPagina(novaPagina);
+            });
+        }
+        
+        // Renderizar primeira página
+        renderPagina(1);
+        
+        // Mostrar resumo
+        $("#produtos-resumo").html(`
+            <div class="produtos-summary">
+                <strong>📊 Resumo:</strong> 
+                ${produtos.length} produtos encontrados | 
+                ${produtos.filter(p => p.status === 'ativo').length} ativos | 
+                ${produtos.filter(p => p.preco_promocional).length} em promoção
+            </div>
+        `);
         
         setupProductEvents();
     }
@@ -600,6 +732,70 @@
             loadProdutosSincronizados();
         });
         
+        // Event listeners para sincronização (funcionam em qualquer página)
+        $(document).on('click', '.btn-sincronizar', function(e) {
+            e.preventDefault();
+            const lojista = $(this).data('lojista');
+            console.log('🔄 Sincronizar clicado para lojista:', lojista);
+            
+            if (!lojista) {
+                console.error('❌ ID do lojista não encontrado no botão');
+                alert('❌ ERRO: ID do lojista não encontrado!');
+                return;
+            }
+            
+            executarSincronizacao(lojista);
+        });
+        
+        // Event listeners para formulários de sincronização
+        $(document).on('submit', 'form', function(e) {
+            const action = $(this).find('input[name="action"]').val();
+            
+            if (action === 'sync_produtos') {
+                e.preventDefault();
+                const lojistaId = $(this).find('input[name="lojista_id"]').val();
+                console.log('🔄 Formulário de sincronização submetido para lojista:', lojistaId);
+                
+                if (!lojistaId) {
+                    alert('❌ ERRO: ID do lojista não encontrado no formulário!');
+                    return;
+                }
+                
+                executarSincronizacao(lojistaId);
+            }
+        });
+        
+        // Event listeners para teste de conexão
+        $(document).on('click', '#btn-test-connection', function(e) {
+            e.preventDefault();
+            const lojistaId = $(this).data('lojista-id');
+            console.log('🔍 Testar conexão para lojista:', lojistaId);
+            
+            if (lojistaId) {
+                testConnection(lojistaId);
+            } else {
+                alert('❌ ERRO: ID do lojista não encontrado para teste de conexão!');
+            }
+        });
+        
+        // Mudança de seleção de lojista
+        $(document).on('change', '#lojista_destino', function() {
+            const selectedValue = $(this).val();
+            const selectedText = $(this).find('option:selected').text();
+            console.log('🎯 Lojista selecionado:', selectedValue, '-', selectedText);
+            
+            // Ativar botão validar quando lojista for selecionado
+            const btnValidar = $("#btn-validar-lojista");
+            if (selectedValue) {
+                btnValidar.prop("disabled", false);
+                console.log('✅ Destino validado:', {id: selectedValue, text: selectedText});
+            } else {
+                btnValidar.prop("disabled", true);
+                $("#btn-carregar-produtos").prop("disabled", true);
+                $("#validacao-status").hide();
+            }
+        });
+        
         // Botão sincronizar vendas (página de produtos sincronizados)
         $(document).on('click', '#btn-sincronizar-vendas', function() {
             console.log('🔄 Clique no botão sincronizar vendas');
@@ -744,6 +940,225 @@
                 $(this).remove();
             });
         }, 5000);
+    }
+    
+    // Sistema de progresso e sincronização
+    function mostrarModalProgresso(lojistaName = 'Lojista') {
+        const modal = `
+            <div id="modal-progresso" class="modal-overlay">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>🔄 Sincronizando ${lojistaName}</h3>
+                    </div>
+                    <div class="modal-body">
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progress-fill" style="width: 0%;"></div>
+                            </div>
+                            <div class="progress-text" id="progress-text">Iniciando sincronização...</div>
+                            <div class="progress-percentage" id="progress-percentage">0%</div>
+                        </div>
+                        <div class="sync-details" id="sync-details">
+                            <div class="detail-item">
+                                <span>📦 Produtos encontrados:</span>
+                                <span id="produtos-encontrados">0</span>
+                            </div>
+                            <div class="detail-item">
+                                <span>✅ Produtos sincronizados:</span>
+                                <span id="produtos-sincronizados">0</span>
+                            </div>
+                            <div class="detail-item">
+                                <span>🆕 Produtos criados:</span>
+                                <span id="produtos-criados">0</span>
+                            </div>
+                            <div class="detail-item">
+                                <span>🔄 Produtos atualizados:</span>
+                                <span id="produtos-atualizados">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        $('body').append(modal);
+        $('#modal-progresso').fadeIn(300);
+    }
+    
+    function fecharModalProgresso() {
+        $('#modal-progresso').fadeOut(300, function() {
+            $(this).remove();
+        });
+    }
+    
+    function atualizarProgresso(porcentagem, texto, detalhes) {
+        $('#progress-fill').css('width', porcentagem + '%');
+        $('#progress-text').text(texto);
+        $('#progress-percentage').text(Math.floor(porcentagem) + '%');
+        
+        if (detalhes) {
+            if (detalhes.encontrados !== undefined) {
+                $('#produtos-encontrados').text(detalhes.encontrados);
+            }
+            if (detalhes.sincronizados !== undefined) {
+                $('#produtos-sincronizados').text(detalhes.sincronizados);
+            }
+            if (detalhes.criados !== undefined) {
+                $('#produtos-criados').text(detalhes.criados);
+            }
+            if (detalhes.atualizados !== undefined) {
+                $('#produtos-atualizados').text(detalhes.atualizados);
+            }
+        }
+    }
+    
+    // Função para atualizar "Última Sync" na tabela
+    function atualizarUltimaSync(lojistaId) {
+        const agora = new Date();
+        const dataFormatada = agora.toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit', 
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        // Encontrar a linha do lojista e atualizar a coluna "Última Sync"
+        const botaoSync = $(`.btn-sincronizar[data-lojista="${lojistaId}"]`);
+        const linha = botaoSync.closest('tr');
+        const colunaUltimaSync = linha.find('td').eq(3); // 4ª coluna (índice 3)
+        
+        if (colunaUltimaSync.length) {
+            colunaUltimaSync.html(`<span style="color: #28a745; font-weight: bold;">✅ ${dataFormatada}</span>`);
+            console.log(`✅ Atualizada "Última Sync" para lojista ${lojistaId}: ${dataFormatada}`);
+        }
+    }
+    
+    function mostrarRelatorioSync(dados) {
+        const relatorio = `
+            <div id="modal-relatorio" class="modal-overlay">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Relatório de Sincronização</h3>
+                        <button class="modal-close" onclick="$('#modal-relatorio').fadeOut(300, function(){ $(this).remove(); })">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="relatorio-resumo">
+                            <div class="resumo-item success">
+                                <span class="resumo-numero">${dados.produtos_sincronizados}</span>
+                                <span class="resumo-label">Produtos Sincronizados</span>
+                            </div>
+                            <div class="resumo-item info">
+                                <span class="resumo-numero">${dados.produtos_criados || 0}</span>
+                                <span class="resumo-label">Produtos Criados</span>
+                            </div>
+                            <div class="resumo-item warning">
+                                <span class="resumo-numero">${dados.produtos_atualizados || 0}</span>
+                                <span class="resumo-label">Produtos Atualizados</span>
+                            </div>
+                            <div class="resumo-item error">
+                                <span class="resumo-numero">${dados.erros || 0}</span>
+                                <span class="resumo-label">Erros</span>
+                            </div>
+                        </div>
+                        ${dados.detalhes ? '<div class="relatorio-detalhes">' + dados.detalhes + '</div>' : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        $('body').append(relatorio);
+        $('#modal-relatorio').fadeIn(300);
+    }
+    
+    // Event listeners para sincronização
+    $(document).on('click', '.btn-sincronizar', function(e) {
+        e.preventDefault();
+        const lojista = $(this).data('lojista');
+        console.log('DEBUG: Sincronizar clicado para lojista:', lojista);
+        
+        if (!lojista) {
+            console.error('ERRO: ID do lojista não encontrado');
+            return;
+        }
+        
+        // Mostrar modal de progresso
+        mostrarModalProgresso();
+        
+        // Executar sincronização real
+        executarSincronizacao(lojista);
+    });
+    
+    function executarSincronizacao(lojistaId) {
+        console.log('🚀 Iniciando sincronização para lojista:', lojistaId);
+        
+        // Verificar se o lojista existe e tem API key
+        const lojistaRow = $(`.btn-sincronizar[data-lojista="${lojistaId}"]`).closest('tr');
+        const lojistaName = lojistaRow.find('td:first').text().trim();
+        
+        if (!lojistaName) {
+            alert('❌ Lojista não encontrado!');
+            return;
+        }
+        
+        // Mostrar modal de progresso com informações do lojista
+        mostrarModalProgresso(lojistaName);
+        
+        // Simular progresso em tempo real
+        let progresso = 0;
+        const progressInterval = setInterval(() => {
+            progresso += Math.random() * 15;
+            if (progresso > 90) progresso = 90; // Deixar 10% para o final real
+            
+            atualizarProgresso(progresso, `Sincronizando produtos do ${lojistaName}...`);
+        }, 200);
+        
+        $.post(SincronizadorWC.ajaxurl, {
+            action: 'sincronizar_produtos',
+            lojista_id: lojistaId,
+            nonce: SincronizadorWC.nonce
+        })
+        .done(function(response) {
+            clearInterval(progressInterval);
+            console.log('DEBUG: Resposta da sincronização:', response);
+            
+            // Completar progresso
+            atualizarProgresso(100, 'Sincronização concluída!');
+            
+            setTimeout(() => {
+                // Fechar modal de progresso
+                fecharModalProgresso();
+                
+                if (response.success) {
+                    // Atualizar "Última Sync" na tabela
+                    atualizarUltimaSync(lojistaId);
+                    
+                    mostrarRelatorioSync(response.data);
+                    
+                    // Não recarregar a página automaticamente
+                    console.log('✅ Sincronização concluída com sucesso!');
+                } else {
+                    alert('❌ Erro na sincronização: ' + (response.data || 'Erro desconhecido'));
+                }
+            }, 1000);
+        })
+        .fail(function(xhr, status, error) {
+            clearInterval(progressInterval);
+            console.error('ERRO na sincronização AJAX:', {xhr, status, error});
+            fecharModalProgresso();
+            
+            let errorMsg = '❌ Erro na sincronização.';
+            if (xhr.responseText) {
+                try {
+                    const errorData = JSON.parse(xhr.responseText);
+                    errorMsg += ' Detalhes: ' + (errorData.data || errorData.message || xhr.responseText);
+                } catch(e) {
+                    errorMsg += ' Resposta do servidor: ' + xhr.responseText.substring(0, 200);
+                }
+            }
+            
+            alert(errorMsg);
+        });
     }
 
     // Expor funções globalmente se necessário

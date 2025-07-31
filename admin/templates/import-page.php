@@ -64,7 +64,9 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
             </div>
             
             <!-- Grid de Produtos -->
+            <div id="produtos-resumo"></div>
             <div id="produtos-grid"></div>
+            <div id="produtos-pagination"></div>
         </div>
     </div>
 

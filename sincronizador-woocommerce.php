@@ -62,19 +62,106 @@ class Sincronizador_WooCommerce {
         
         // Initialize asset management for admin
         if (is_admin()) {
-            add_action('admin_enqueue_scripts', array($this, 'init_assets'));
+            add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
         }
     }
     
-    public function init_assets($hook) {
-        // Only load on our plugin pages
-        if (strpos($hook, 'sincronizador-wc') === false) {
+    public function enqueue_admin_assets($hook) {
+        // Debug: verificar hook atual
+        error_log('SINCRONIZADOR WC DEBUG - Hook atual: ' . $hook);
+        
+        // Lista de hooks válidos para carregar assets
+        $valid_hooks = array(
+            'toplevel_page_sincronizador-wc',
+            'sincronizador-wc_page_sincronizador-wc-lojistas',
+            'sincronizador-wc_page_sincronizador-wc-add-lojista',
+            'sincronizador-wc_page_sincronizador-wc-importar',
+            'sincronizador-wc_page_sincronizador-wc-sincronizados',
+            'sincronizador-wc_page_sincronizador-wc-config'
+        );
+        
+        $should_load = false;
+        foreach ($valid_hooks as $valid_hook) {
+            if (strpos($hook, $valid_hook) !== false || $hook === $valid_hook) {
+                $should_load = true;
+                break;
+            }
+        }
+        
+        // Fallback: se contém sincronizador, carrega
+        if (!$should_load && (strpos($hook, 'sincronizador') !== false)) {
+            $should_load = true;
+        }
+        
+        if (!$should_load) {
+            error_log('SINCRONIZADOR WC DEBUG - Hook não corresponde, assets não carregados. Hook: ' . $hook);
             return;
         }
         
+        error_log('SINCRONIZADOR WC DEBUG - Carregando assets para hook: ' . $hook);
+        
+        // CSS
+        wp_enqueue_style(
+            'sincronizador-wc-admin-css',
+            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/css/admin-styles.css',
+            array(),
+            SINCRONIZADOR_WC_VERSION
+        );
+        
+        // JavaScript
+        wp_enqueue_script(
+            'sincronizador-wc-admin-js',
+            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/admin-scripts.js',
+            array('jquery'),
+            SINCRONIZADOR_WC_VERSION,
+            true
+        );
+        
+        // Localizar script com dados necessários
+        wp_localize_script('sincronizador-wc-admin-js', 'SincronizadorWC', array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('sincronizador_wc_nonce'),
+            'strings' => array(
+                'confirmDelete' => 'Tem certeza que deseja remover?',
+                'loading' => 'Carregando...',
+                'error' => 'Erro na requisição',
+                'success' => 'Operação realizada com sucesso',
+                'validatingConnection' => 'Testando conexão...',
+                'connectionSuccess' => 'Conexão OK!',
+                'connectionError' => 'Erro na conexão',
+                'selectProducts' => 'Selecione pelo menos um produto',
+                'importingProducts' => 'Importando produtos...',
+                'syncingData' => 'Sincronizando dados...'
+            )
+        ));
+        
+        error_log('SINCRONIZADOR WC DEBUG - Assets enfileirados com sucesso!');
+        error_log('SINCRONIZADOR WC DEBUG - JavaScript URL: ' . SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/admin-scripts.js');
+        error_log('SINCRONIZADOR WC DEBUG - CSS URL: ' . SINCRONIZADOR_WC_PLUGIN_URL . 'admin/css/admin-styles.css');
+    }
+
+    public function init_assets($hook) {
+        // Debug: verificar hook atual
+        error_log('Hook atual: ' . $hook);
+        
+        // Only load on our plugin pages - verificação mais ampla
+        if (strpos($hook, 'sincronizador-wc') === false && 
+            strpos($hook, 'sincronizador_wc') === false) {
+            error_log('Hook não corresponde ao plugin, assets não carregados');
+            return;
+        }
+        
+        error_log('Carregando assets para: ' . $hook);
+        
         // Initialize asset management
+        if (!class_exists('Sincronizador_WC_Assets')) {
+            require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'admin/class-assets.php';
+        }
+        
         if (class_exists('Sincronizador_WC_Assets')) {
             new Sincronizador_WC_Assets();
+        } else {
+            error_log('Classe Sincronizador_WC_Assets não encontrada');
         }
     }
     

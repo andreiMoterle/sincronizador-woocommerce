@@ -7,8 +7,8 @@
     'use strict';
 
     // Variáveis globais
-    window.SincronizadorWC = {
-        ajaxurl: ajaxurl || '',
+    window.SincronizadorWC = window.SincronizadorWC || {
+        ajaxurl: (typeof ajaxurl !== 'undefined') ? ajaxurl : '/wp-admin/admin-ajax.php',
         nonce: '',
         currentImportId: null,
         progressInterval: null,
@@ -16,6 +16,35 @@
     };
 
     $(document).ready(function() {
+        console.log('=== SINCRONIZADOR WC DEBUG ===');
+        console.log('SincronizadorWC object:', window.SincronizadorWC);
+        console.log('SincronizadorWC carregado:', typeof SincronizadorWC !== 'undefined');
+        console.log('jQuery carregado:', typeof $ !== 'undefined');
+        console.log('AJAX URL:', window.SincronizadorWC.ajaxurl);
+        console.log('Nonce:', window.SincronizadorWC.nonce);
+        
+        // Verificar se existe o nonce
+        if (!window.SincronizadorWC.nonce || window.SincronizadorWC.nonce === '') {
+            console.warn('⚠️ NONCE NÃO DEFINIDO! Os requests AJAX podem falhar.');
+            
+            // Tentar obter nonce de outro lugar se possível
+            const metaNonce = $('meta[name="sincronizador-wc-nonce"]').attr('content');
+            if (metaNonce) {
+                window.SincronizadorWC.nonce = metaNonce;
+                console.log('✅ Nonce encontrado em meta tag:', metaNonce);
+            }
+        }
+        
+        console.log('Elementos encontrados:', {
+            lojista_destino: $('#lojista_destino').length,
+            btn_validar: $('#btn-validar-lojista').length,
+            btn_carregar: $('#btn-carregar-produtos').length,
+            btn_carregar_sync: $('#btn-carregar-sincronizados').length,
+            btn_test_connection: $('#btn-test-connection').length,
+            tabela_sincronizados: $('#tabela-sincronizados').length
+        });
+        
+        console.log('=== INICIANDO SINCRONIZADOR ===');
         initSincronizador();
     });
 
@@ -40,41 +69,13 @@
 
     // === PÁGINA DE IMPORTAÇÃO === //
     function initImportPage() {
+        console.log('📦 Inicializando página de importação');
         let currentImportId = null;
         let progressInterval = null;
 
-        // Habilitar botão quando lojista selecionado
-        $("#lojista_destino").on("change", function() {
-            const lojistaId = $(this).val();
-            $("#btn-validar-lojista").prop("disabled", !lojistaId);
-            
-            if (!lojistaId) {
-                resetImportPage();
-            }
-        });
-
-        // Validar lojista
-        $("#btn-validar-lojista").on("click", function() {
-            const lojistaId = $("#lojista_destino").val();
-            if (!lojistaId) {
-                alert("Selecione um lojista primeiro!");
-                return;
-            }
-            
-            validateLojista(lojistaId);
-        });
-
-        // Carregar produtos
-        $("#btn-carregar-produtos").on("click", function() {
-            loadProdutos();
-        });
-
-        // Iniciar importação
-        $("#btn-iniciar-importacao").on("click", function() {
-            startImport();
-        });
-
-        // Eventos de produtos
+        // Os eventos agora são tratados na função initGlobalEvents()
+        // Apenas configurações específicas aqui
+        
         setupProductEvents();
     }
 
@@ -309,35 +310,21 @@
 
     // === PÁGINA DE PRODUTOS SINCRONIZADOS === //
     function initSyncPage() {
-        // Habilitar botões quando lojista selecionado
-        $("#lojista_destino").on("change", function() {
-            const lojistaId = $(this).val();
-            $("#btn-carregar-sincronizados").prop("disabled", !lojistaId);
-            $("#btn-sincronizar-vendas").prop("disabled", !lojistaId);
-            
-            if (!lojistaId) {
-                $("#tabela-sincronizados").hide();
-            }
-        });
+        console.log('📊 Inicializando página de produtos sincronizados');
         
-        // Carregar produtos sincronizados
-        $("#btn-carregar-sincronizados").on("click", function() {
-            loadProdutosSincronizados();
-        });
+        // Os eventos agora são tratados na função initGlobalEvents()
+        // Apenas configurações específicas aqui
         
-        // Sincronizar vendas
-        $("#btn-sincronizar-vendas").on("click", function() {
-            syncVendas();
-        });
-        
-        // Busca
-        $("#buscar-sincronizado").on("input", function() {
+        // Busca em tempo real
+        $(document).on('input', '#buscar-sincronizado', function() {
             const termo = this.value.toLowerCase();
-            const produtosFiltrados = SincronizadorWC.produtosSincronizados.filter(produto => 
-                produto.nome.toLowerCase().includes(termo) || 
-                produto.sku.toLowerCase().includes(termo)
-            );
-            renderProdutosSincronizados(produtosFiltrados);
+            if (SincronizadorWC.produtosSincronizados) {
+                const produtosFiltrados = SincronizadorWC.produtosSincronizados.filter(produto => 
+                    produto.nome.toLowerCase().includes(termo) || 
+                    produto.sku.toLowerCase().includes(termo)
+                );
+                renderProdutosSincronizados(produtosFiltrados);
+            }
         });
     }
 
@@ -508,6 +495,51 @@
         });
     }
 
+    // === TESTE DE CONEXÃO === //
+    function initConnectionTest() {
+        $('#btn-test-connection').on('click', function() {
+            const $btn = $(this);
+            const lojistaId = $btn.data('lojista-id');
+            const $status = $('#connection-status');
+            
+            if (!lojistaId) {
+                $status.html('<span style="color: red;">❌ ID do lojista não encontrado</span>');
+                return;
+            }
+            
+            // Desabilitar botão e mostrar loading
+            $btn.prop('disabled', true).text('🔄 Testando...');
+            $status.html('<span style="color: #0073aa;">⏳ ' + SincronizadorWC.strings.validatingConnection + '</span>');
+            
+            // Fazer requisição AJAX
+            $.ajax({
+                url: SincronizadorWC.ajaxurl,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'sincronizador_wc_test_connection',
+                    nonce: SincronizadorWC.nonce,
+                    lojista_id: lojistaId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $status.html('<span style="color: green;">✅ ' + response.data.message + '</span>');
+                    } else {
+                        $status.html('<span style="color: red;">❌ ' + response.data + '</span>');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Erro na requisição:', error);
+                    $status.html('<span style="color: red;">❌ Erro na comunicação: ' + error + '</span>');
+                },
+                complete: function() {
+                    // Reabilitar botão
+                    $btn.prop('disabled', false).text('🔄 Testar Conexão');
+                }
+            });
+        });
+    }
+
     // === EVENTOS GLOBAIS === //
     function initGlobalEvents() {
         // Fechar modais
@@ -523,9 +555,176 @@
                 $(".sincronizador-modal").hide().removeClass("fade-in");
             }
         });
+        
+        // === DELEGAÇÃO DE EVENTOS PARA BOTÕES === //
+        
+        // Botão validar lojista (página de importação)
+        $(document).on('click', '#btn-validar-lojista', function() {
+            console.log('🔍 Clique no botão validar lojista');
+            const lojistaId = $("#lojista_destino").val();
+            if (!lojistaId) {
+                alert("Selecione um lojista primeiro!");
+                return;
+            }
+            
+            // VALIDAÇÃO CRÍTICA: Verificar se o destino realmente existe antes de validar
+            if (!validateDestinoExists(lojistaId)) {
+                alert("❌ ERRO: O destino selecionado não existe ou não está configurado corretamente!");
+                return;
+            }
+            
+            validateLojista(lojistaId);
+        });
+        
+        // Botão carregar produtos (página de importação)
+        $(document).on('click', '#btn-carregar-produtos', function() {
+            console.log('📋 Clique no botão carregar produtos');
+            loadProdutos();
+        });
+        
+        // Botão carregar sincronizados (página de produtos sincronizados)
+        $(document).on('click', '#btn-carregar-sincronizados', function() {
+            console.log('📊 Clique no botão carregar sincronizados');
+            const lojistaId = $("#lojista_destino").val();
+            
+            if (!lojistaId) {
+                alert("Selecione um lojista primeiro!");
+                return;
+            }
+            
+            if (!validateDestinoExists(lojistaId)) {
+                alert("❌ ERRO: O destino selecionado não existe! Configure um lojista válido primeiro.");
+                return;
+            }
+            
+            loadProdutosSincronizados();
+        });
+        
+        // Botão sincronizar vendas (página de produtos sincronizados)
+        $(document).on('click', '#btn-sincronizar-vendas', function() {
+            console.log('🔄 Clique no botão sincronizar vendas');
+            const lojistaId = $("#lojista_destino").val();
+            
+            if (!lojistaId) {
+                alert("Selecione um lojista primeiro!");
+                return;
+            }
+            
+            if (!validateDestinoExists(lojistaId)) {
+                alert("❌ ERRO: Não é possível sincronizar vendas! O destino não existe ou não está configurado.");
+                return;
+            }
+            
+            // Confirmar ação
+            if (!confirm("Deseja sincronizar as vendas deste lojista? Esta operação pode demorar alguns minutos.")) {
+                return;
+            }
+            
+            syncVendas();
+        });
+        
+        // Botão test connection (página de edição de lojista)
+        $(document).on('click', '#btn-test-connection', function() {
+            console.log('🔄 Clique no botão test connection');
+            const lojistaId = $(this).data('lojista-id');
+            if (!lojistaId) {
+                $('#connection-status').html('<span style="color: red;">❌ ID do lojista não encontrado</span>');
+                return;
+            }
+            testConnection(lojistaId);
+        });
+        
+        // Change event para select de lojista
+        $(document).on('change', '#lojista_destino', function() {
+            const lojistaId = $(this).val();
+            console.log('🎯 Lojista selecionado:', lojistaId);
+            
+            // Atualizar botões na página de importação
+            $("#btn-validar-lojista").prop("disabled", !lojistaId);
+            
+            // Atualizar botões na página de sincronização
+            $("#btn-carregar-sincronizados").prop("disabled", !lojistaId);
+            $("#btn-sincronizar-vendas").prop("disabled", !lojistaId);
+            
+            if (!lojistaId) {
+                resetImportPage();
+                $("#tabela-sincronizados").hide();
+            }
+        });
+    }
+
+    // === TESTE DE CONEXÃO === //
+    function testConnection(lojistaId) {
+        const $btn = $('#btn-test-connection');
+        const $status = $('#connection-status');
+        
+        if (!lojistaId) {
+            $status.html('<span style="color: red;">❌ ID do lojista não encontrado</span>');
+            return;
+        }
+        
+        // Desabilitar botão e mostrar loading
+        $btn.prop('disabled', true).text('🔄 Testando...');
+        $status.html('<span style="color: #0073aa;">⏳ ' + (SincronizadorWC.strings ? SincronizadorWC.strings.validatingConnection : 'Testando conexão...') + '</span>');
+        
+        // Fazer requisição AJAX
+        $.ajax({
+            url: SincronizadorWC.ajaxurl,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'sincronizador_wc_test_connection',
+                nonce: SincronizadorWC.nonce,
+                lojista_id: lojistaId
+            },
+            success: function(response) {
+                console.log('Resposta do teste de conexão:', response);
+                if (response.success) {
+                    $status.html('<span style="color: green;">✅ ' + response.data.message + '</span>');
+                } else {
+                    $status.html('<span style="color: red;">❌ ' + response.data + '</span>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Erro na requisição:', error);
+                $status.html('<span style="color: red;">❌ Erro na comunicação: ' + error + '</span>');
+            },
+            complete: function() {
+                // Reabilitar botão
+                $btn.prop('disabled', false).text('🔄 Testar Conexão');
+            }
+        });
+    }
+
+    function initConnectionTest() {
+        console.log('🔧 Inicializando teste de conexão');
+        // A funcionalidade agora está na delegação de eventos globais
     }
 
     // === UTILITY FUNCTIONS === //
+    function validateDestinoExists(lojistaId) {
+        // Verificar se o select tem a opção selecionada
+        const selectedOption = $("#lojista_destino option:selected");
+        if (!selectedOption.length || selectedOption.val() === '') {
+            console.error('❌ Nenhuma opção válida selecionada');
+            return false;
+        }
+        
+        // Verificar se o texto da opção contém informações válidas
+        const optionText = selectedOption.text();
+        if (!optionText || optionText.indexOf('http') === -1) {
+            console.error('❌ URL do destino não encontrada na opção selecionada');
+            return false;
+        }
+        
+        console.log('✅ Destino validado:', {
+            id: lojistaId,
+            text: optionText
+        });
+        
+        return true;
+    }
+
     function formatPrice(price) {
         return parseFloat(price || 0).toFixed(2).replace(".", ",");
     }

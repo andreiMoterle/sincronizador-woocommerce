@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste JavaScript - Sincronizador WC</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Teste de JavaScript - Sincronizador WC</h1>
+    
+    <div>
+        <button id="btn-validar-lojista">🔍 Validar Lojista</button>
+        <button id="btn-carregar-produtos">📋 Carregar Produtos</button>
+        <button id="btn-carregar-sincronizados">📊 Carregar Sincronizados</button>
+        <button id="btn-test-connection">🔄 Testar Conexão</button>
+    </div>
+    
+    <div>
+        <select id="lojista_destino">
+            <option value="">Selecione...</option>
+            <option value="1">Teste (https://teste.com)</option>
+        </select>
+    </div>
+    
+    <div id="console-log"></div>
+    
+    <script>
+        // Simular o SincronizadorWC
+        window.SincronizadorWC = {
+            ajaxurl: '/wp-admin/admin-ajax.php',
+            nonce: 'test-nonce',
+            currentImportId: null,
+            progressInterval: null,
+            produtosSincronizados: []
+        };
+        
+        $(document).ready(function() {
+            console.log('=== TESTE SINCRONIZADOR WC ===');
+            
+            // Test click handlers
+            $(document).on('click', '#btn-validar-lojista', function() {
+                console.log('✅ FUNCIONOU: Clique no botão validar lojista');
+                $('#console-log').append('<p>✅ Botão validar lojista FUNCIONOU!</p>');
+            });
+            
+            $(document).on('click', '#btn-carregar-produtos', function() {
+                console.log('✅ FUNCIONOU: Clique no botão carregar produtos');
+                $('#console-log').append('<p>✅ Botão carregar produtos FUNCIONOU!</p>');
+            });
+            
+            $(document).on('click', '#btn-carregar-sincronizados', function() {
+                console.log('✅ FUNCIONOU: Clique no botão carregar sincronizados');
+                $('#console-log').append('<p>✅ Botão carregar sincronizados FUNCIONOU!</p>');
+            });
+            
+            $(document).on('click', '#btn-test-connection', function() {
+                console.log('✅ FUNCIONOU: Clique no botão test connection');
+                $('#console-log').append('<p>✅ Botão test connection FUNCIONOU!</p>');
+            });
+            
+            console.log('=== TESTE CONCLUÍDO ===');
+            $('#console-log').append('<p><strong>Teste carregado! Clique nos botões para testar.</strong></p>');
+        });
+    </script>
+</body>
+</html>

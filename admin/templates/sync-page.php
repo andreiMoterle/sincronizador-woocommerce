@@ -12,6 +12,8 @@ $lojistas = get_option('sincronizador_wc_lojistas', array());
 $nonce = wp_create_nonce('sincronizador_wc_nonce');
 ?>
 
+<meta name="sincronizador-wc-nonce" content="<?php echo $nonce; ?>">
+
 <div class="wrap sincronizador-wc-wrap">
     <h1>📊 Produtos Sincronizados</h1>
     
@@ -86,8 +88,3 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
         </div>
     </div>
 </div>
-
-<script>
-// Configurar variáveis globais para JavaScript
-SincronizadorWC.nonce = '<?php echo $nonce; ?>';
-</script>

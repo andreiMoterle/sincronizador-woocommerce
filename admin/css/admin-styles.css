@@ -421,7 +421,7 @@
     opacity: 0.7;
 }
 
-#produtos-section .card {
+#produtos-section .card,#tabela-sincronizados .card {
     width: 100%;
     max-width: 100% !important;
 }
@@ -796,4 +796,102 @@
         font-size: 12px;
         padding: 2px 6px;
     }
+}
+
+/* === Produtos Variáveis === */
+.produto-tipo-variavel {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.produto-info-variacoes {
+    color: #666;
+    font-size: 11px;
+    font-style: italic;
+    display: block;
+    margin-top: 2px;
+}
+
+/* Melhorar visualização de preços */
+.price-value {
+    color: #0073aa;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.price-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 5px 0;
+    padding: 3px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.price-label {
+    font-size: 12px;
+    color: #666;
+}
+
+/* Variações no modal */
+.variacoes-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e1e1e1;
+    border-radius: 4px;
+    padding: 10px;
+    background: #fafafa;
+}
+
+.variacao-item {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.variacao-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #eee;
+}
+
+.attribute-tag {
+    display: inline-block;
+    background: #e7f3ff;
+    color: #0073aa;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    margin: 2px 3px 2px 0;
+}
+
+.stock-value {
+    font-weight: bold;
+}
+
+.variacao-status.status-ativo {
+    background: #46b450;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.variacao-status.status-erro {
+    background: #dc3232;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
 }

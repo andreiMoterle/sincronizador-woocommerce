@@ -509,6 +509,15 @@ class Sincronizador_WooCommerce {
             error_log('SYNC: Nenhum produto encontrado na fábrica');
             return 0;
         }
+
+        // Obter histórico de envios para salvar produtos sincronizados
+        $historico_envios = get_option('sincronizador_wc_historico_envios', array());
+        $lojista_url = $lojista['url'];
+        
+        // Inicializar array para este lojista se não existir
+        if (!isset($historico_envios[$lojista_url])) {
+            $historico_envios[$lojista_url] = array();
+        }
         
         $produtos_sincronizados = 0;
         $produtos_atualizados = 0;
@@ -524,31 +533,38 @@ class Sincronizador_WooCommerce {
                 
                 if ($produto_destino_id) {
                     // Produto existe - atualizar
-                    $resultado = $this->atualizar_produto_no_destino($lojista, $produto_destino_id, $produto_fabrica);
-                    if ($resultado) {
+                    $resultado_id = $this->atualizar_produto_no_destino($lojista, $produto_destino_id, $produto_fabrica);
+                    if ($resultado_id) {
                         $produtos_atualizados++;
                         $produtos_sincronizados++;
+                        // Salvar no histórico
+                        $historico_envios[$lojista_url][$produto_fabrica['id']] = $resultado_id;
                     } else {
                         $erros++;
                     }
                 } else {
                     // Produto não existe - criar
-                    $resultado = $this->criar_produto_no_destino($lojista, $produto_fabrica);
-                    if ($resultado) {
+                    $resultado_id = $this->criar_produto_no_destino($lojista, $produto_fabrica);
+                    if ($resultado_id) {
                         $produtos_criados++;
                         $produtos_sincronizados++;
+                        // Salvar no histórico
+                        $historico_envios[$lojista_url][$produto_fabrica['id']] = $resultado_id;
                     } else {
                         $erros++;
                     }
                 }
                 
-                error_log("SYNC: Produto {$produto_fabrica['sku']} - " . ($resultado ? 'SUCESSO' : 'ERRO'));
+                error_log("SYNC: Produto {$produto_fabrica['sku']} - " . ($resultado_id ? 'SUCESSO' : 'ERRO'));
                 
             } catch (Exception $e) {
                 error_log('SYNC ERROR: ' . $e->getMessage());
                 $erros++;
             }
         }
+
+        // Salvar o histórico de envios atualizado
+        update_option('sincronizador_wc_historico_envios', $historico_envios);
         
         // Salvar relatório detalhado
         $this->salvar_relatorio_sync($lojista['nome'], $produtos_sincronizados, $produtos_criados, $produtos_atualizados, $erros);
@@ -583,13 +599,40 @@ class Sincronizador_WooCommerce {
             $produto = wc_get_product($produto_post->ID);
             
             if ($produto && $produto->get_sku()) {
+                // Debug dos preços na importação
+                $preco_regular = $produto->get_regular_price();
+                $preco_atual = $produto->get_price();
+                $preco_promocional = $produto->get_sale_price();
+                
+                error_log("DEBUG IMPORTAÇÃO - Produto ID {$produto_post->ID}: regular_price={$preco_regular}, price={$preco_atual}, sale_price={$preco_promocional}");
+                
+                // Determinar o melhor preço para exibir
+                $preco_final = '';
+                if (!empty($preco_atual) && $preco_atual !== '0') {
+                    $preco_final = $preco_atual;
+                } elseif (!empty($preco_regular) && $preco_regular !== '0') {
+                    $preco_final = $preco_regular;
+                } else {
+                    // Tentar buscar diretamente do meta
+                    $preco_meta = get_post_meta($produto_post->ID, '_price', true);
+                    $regular_meta = get_post_meta($produto_post->ID, '_regular_price', true);
+                    
+                    if (!empty($preco_meta) && $preco_meta !== '0') {
+                        $preco_final = $preco_meta;
+                    } elseif (!empty($regular_meta) && $regular_meta !== '0') {
+                        $preco_final = $regular_meta;
+                    }
+                }
+                
+                error_log("DEBUG IMPORTAÇÃO - Produto ID {$produto_post->ID}: preço final escolhido = {$preco_final}");
+                
                 $produtos_formatados[] = array(
                     'id' => $produto->get_id(),
                     'name' => $produto->get_name(),
                     'sku' => $produto->get_sku(),
-                    'regular_price' => $produto->get_regular_price(),
-                    'sale_price' => $produto->get_sale_price(),
-                    'stock_quantity' => $produto->get_stock_quantity(),
+                    'regular_price' => $preco_regular ?: '0',
+                    'sale_price' => $preco_promocional ?: '',
+                    'stock_quantity' => $produto->get_stock_quantity() ?: 0,
                     'description' => $produto->get_description(),
                     'short_description' => $produto->get_short_description(),
                     'categories' => wp_get_post_terms($produto->get_id(), 'product_cat', array('fields' => 'names')),
@@ -772,7 +815,14 @@ class Sincronizador_WooCommerce {
         }
         
         $response_code = wp_remote_retrieve_response_code($response);
-        return $response_code === 201;
+        if ($response_code === 201) {
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+            if (!empty($body) && isset($body['id'])) {
+                return $body['id']; // Retorna o ID do produto criado
+            }
+        }
+        
+        return false;
     }
     
     /**
@@ -806,7 +856,11 @@ class Sincronizador_WooCommerce {
         }
         
         $response_code = wp_remote_retrieve_response_code($response);
-        return $response_code === 200;
+        if ($response_code === 200) {
+            return $produto_id; // Retorna o ID do produto atualizado
+        }
+        
+        return false;
     }
     
     /**
@@ -1018,7 +1072,19 @@ class Sincronizador_WooCommerce {
         echo '<ul>';
         echo '<li><strong>Lojistas cadastrados:</strong> ' . count($this->get_lojistas()) . '</li>';
         echo '<li><strong>Lojistas ativos:</strong> ' . count(array_filter($this->get_lojistas(), function($l) { return $l['ativo']; })) . '</li>';
-        echo '<li><strong>Última sincronização:</strong> Nunca</li>';
+        
+        // Buscar última sincronização real
+        $historico = get_option('sincronizador_wc_relatorios_sync', array());
+        $ultima_sync = 'Nunca';
+        if (!empty($historico)) {
+            // Pegar o relatório mais recente
+            $ultimo_relatorio = end($historico);
+            if (isset($ultimo_relatorio['data'])) {
+                $ultima_sync = date('d/m/Y H:i', strtotime($ultimo_relatorio['data']));
+            }
+        }
+        
+        echo '<li><strong>Última sincronização:</strong> ' . $ultima_sync . '</li>';
         echo '<li><strong>Plugin ativo desde:</strong> ' . date('d/m/Y H:i') . '</li>';
         echo '</ul>';
         echo '</div>';
@@ -1178,6 +1244,7 @@ class Sincronizador_WooCommerce {
         add_action('wp_ajax_sincronizador_wc_import_produtos', array($this, 'ajax_import_produtos'));
         
         // AJAX handlers para sincronização
+        add_action('wp_ajax_verificar_lojista_config', array($this, 'ajax_verificar_lojista_config'));
         add_action('wp_ajax_sincronizar_produtos', array($this, 'ajax_sincronizar_produtos'));
         
         // AJAX handlers para produtos sincronizados
@@ -1248,6 +1315,57 @@ class Sincronizador_WooCommerce {
     public function deactivate() {
         require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-deactivator.php';
         Sincronizador_WC_Deactivator::deactivate();
+    }
+    
+    /**
+     * AJAX: Verificar configuração do lojista antes da sincronização
+     */
+    public function ajax_verificar_lojista_config() {
+        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die('Sem permissão');
+        }
+        
+        $lojista_id = intval($_POST['lojista_id']);
+        $lojistas = get_option('sincronizador_wc_lojistas', array());
+        
+        $lojista = null;
+        foreach ($lojistas as $l) {
+            if ($l['id'] == $lojista_id) {
+                $lojista = $l;
+                break;
+            }
+        }
+        
+        if (!$lojista) {
+            wp_send_json_error('Lojista não encontrado');
+            return;
+        }
+        
+        // Verificar se tem API key configurada
+        if (empty($lojista['consumer_key']) || empty($lojista['consumer_secret'])) {
+            wp_send_json_error('API key não configurada para este lojista');
+            return;
+        }
+        
+        // Verificar se está ativo
+        if ($lojista['status'] !== 'ativo') {
+            wp_send_json_error('Lojista está inativo');
+            return;
+        }
+        
+        // Verificar se tem URL válida
+        if (empty($lojista['url'])) {
+            wp_send_json_error('URL não configurada para este lojista');
+            return;
+        }
+        
+        // Tudo OK - pode prosseguir
+        wp_send_json_success(array(
+            'message' => 'Lojista validado e pronto para sincronização',
+            'lojista_name' => $lojista['nome']
+        ));
     }
     
     /**
@@ -1396,13 +1514,30 @@ class Sincronizador_WooCommerce {
         // Formatar produtos para exibição
         $produtos_formatados = array();
         foreach ($produtos as $produto) {
+            // Determinar melhor preço para exibir
+            $preco_exibir = '';
+            if (!empty($produto['regular_price']) && $produto['regular_price'] !== '0') {
+                $preco_exibir = floatval($produto['regular_price']);
+            } else {
+                $preco_exibir = 0;
+            }
+            
+            $preco_promocional_exibir = '';
+            if (!empty($produto['sale_price']) && $produto['sale_price'] !== '0') {
+                $preco_promocional_exibir = floatval($produto['sale_price']);
+            } else {
+                $preco_promocional_exibir = 0;
+            }
+            
+            error_log("DEBUG AJAX IMPORTAÇÃO - Produto {$produto['id']}: preço regular={$preco_exibir}, preço promocional={$preco_promocional_exibir}");
+            
             $produtos_formatados[] = array(
                 'id' => $produto['id'],
                 'nome' => $produto['name'],
                 'sku' => $produto['sku'],
-                'preco' => $produto['regular_price'],
-                'preco_promocional' => $produto['sale_price'],
-                'estoque' => $produto['stock_quantity'],
+                'preco' => $preco_exibir,
+                'preco_promocional' => $preco_promocional_exibir,
+                'estoque' => $produto['stock_quantity'] ?: 0,
                 'categoria' => is_array($produto['categories']) ? implode(', ', $produto['categories']) : 'Sem categoria',
                 'imagem' => !empty($produto['images']) ? $produto['images'][0] : 'https://via.placeholder.com/80x80/CCCCCC/FFFFFF?text=IMG',
                 'status' => 'ativo',
@@ -1586,7 +1721,24 @@ class Sincronizador_WooCommerce {
             wp_send_json_error('Lojista não encontrado - ID: ' . $lojista_id);
         }
         
+        // Verificar se o lojista tem configuração válida
+        if (empty($lojista_data['consumer_key']) || empty($lojista_data['consumer_secret'])) {
+            wp_send_json_error('Lojista não tem API key configurada. Configure a API key antes de visualizar produtos sincronizados.');
+            return;
+        }
+        
+        if ($lojista_data['status'] !== 'ativo') {
+            wp_send_json_error('Lojista está inativo. Ative o lojista antes de visualizar produtos sincronizados.');
+            return;
+        }
+        
         $produtos_sincronizados = $this->get_produtos_sincronizados($lojista_data);
+        
+        // Se não há produtos, mas o lojista está configurado, dar uma mensagem mais clara
+        if (empty($produtos_sincronizados)) {
+            wp_send_json_error('Nenhum produto foi sincronizado ainda para este lojista. Execute uma sincronização primeiro.');
+            return;
+        }
         
         wp_send_json_success($produtos_sincronizados);
     }
@@ -1703,6 +1855,14 @@ class Sincronizador_WooCommerce {
                 // Obter vendas do produto no destino
                 $vendas = $this->get_vendas_produto_destino($lojista_data, $produto_id_destino);
                 
+                // Verificar se produto tem variações
+                $tem_variacoes = $this->produto_tem_variacoes($produto_fabrica);
+                $variacoes_info = array();
+                
+                if ($tem_variacoes) {
+                    $variacoes_info = $this->get_variacoes_produto($produto_fabrica, $lojista_data, $produto_id_destino);
+                }
+                
                 $produtos_sincronizados[] = array(
                     'id_fabrica' => $produto_fabrica->get_id(),
                     'id_destino' => $produto_id_destino,
@@ -1710,12 +1870,15 @@ class Sincronizador_WooCommerce {
                     'sku' => $produto_fabrica->get_sku(),
                     'imagem' => wp_get_attachment_image_url($produto_fabrica->get_image_id(), 'thumbnail') ?: 'https://via.placeholder.com/50x50',
                     'status' => $dados_destino ? 'sincronizado' : 'erro',
-                    'preco_fabrica' => $produto_fabrica->get_regular_price(),
-                    'preco_destino' => $dados_destino['regular_price'] ?? null,
-                    'estoque_fabrica' => $produto_fabrica->get_stock_quantity(),
-                    'estoque_destino' => $dados_destino['stock_quantity'] ?? null,
+                    'preco_fabrica' => $this->formatar_preco_produto($produto_fabrica),
+                    'preco_destino' => $this->formatar_preco_destino($dados_destino),
+                    'estoque_fabrica' => $produto_fabrica->get_stock_quantity() ?: 0,
+                    'estoque_destino' => $dados_destino['stock_quantity'] ?? 0,
                     'vendas' => $vendas,
-                    'ultima_sync' => $dados_destino['date_modified'] ?? null
+                    'ultima_sync' => $dados_destino['date_modified'] ?? null,
+                    'tem_variacoes' => $tem_variacoes,
+                    'variacoes' => $variacoes_info,
+                    'tipo_produto' => $tem_variacoes ? 'variável' : 'simples'
                 );
             }
         }
@@ -1765,6 +1928,190 @@ class Sincronizador_WooCommerce {
         $data = json_decode(wp_remote_retrieve_body($response), true);
         
         return isset($data[0]['items_sold']) ? intval($data[0]['items_sold']) : 0;
+    }
+
+    /**
+     * Formatar preço do produto da fábrica
+     */
+    private function formatar_preco_produto($produto) {
+        // Debug: log dos valores obtidos
+        $id = $produto->get_id();
+        $preco_atual = $produto->get_price();
+        $preco_regular = $produto->get_regular_price();
+        $preco_meta = get_post_meta($id, '_price', true);
+        $regular_meta = get_post_meta($id, '_regular_price', true);
+        
+        error_log("DEBUG PREÇO - Produto ID {$id}: get_price()={$preco_atual}, get_regular_price()={$preco_regular}, _price meta={$preco_meta}, _regular_price meta={$regular_meta}");
+        
+        // Primeiro tenta pegar o preço atual (com promoção se houver)
+        $preco = $produto->get_price();
+        
+        // Se não houver preço atual, pega o preço regular
+        if (empty($preco) || $preco === '' || $preco === '0') {
+            $preco = $produto->get_regular_price();
+        }
+        
+        // Se ainda estiver vazio, pega direto do meta
+        if (empty($preco) || $preco === '' || $preco === '0') {
+            $preco = get_post_meta($produto->get_id(), '_price', true);
+            if (empty($preco) || $preco === '0') {
+                $preco = get_post_meta($produto->get_id(), '_regular_price', true);
+            }
+        }
+        
+        $preco_final = is_numeric($preco) && floatval($preco) > 0 ? floatval($preco) : 0;
+        error_log("DEBUG PREÇO - Produto ID {$id}: preço final calculado = {$preco_final}");
+        
+        return $preco_final;
+    }
+    
+    /**
+     * Verificar se produto tem variações
+     */
+    private function produto_tem_variacoes($produto) {
+        if (!$produto) {
+            return false;
+        }
+        
+        return $produto->is_type('variable');
+    }
+    
+    /**
+     * Obter informações das variações do produto
+     */
+    private function get_variacoes_produto($produto_fabrica, $lojista_data, $produto_id_destino) {
+        $variacoes = array();
+        
+        if (!$this->produto_tem_variacoes($produto_fabrica)) {
+            return $variacoes;
+        }
+        
+        // Obter variações da fábrica
+        $variacoes_fabrica = $produto_fabrica->get_children();
+        
+        if (empty($variacoes_fabrica)) {
+            return $variacoes;
+        }
+        
+        // Obter variações do destino
+        $variacoes_destino = $this->get_variacoes_destino($lojista_data, $produto_id_destino);
+        
+        foreach ($variacoes_fabrica as $variacao_id) {
+            $variacao_fabrica = wc_get_product($variacao_id);
+            
+            if (!$variacao_fabrica) {
+                continue;
+            }
+            
+            // Buscar variação correspondente no destino pelo SKU
+            $variacao_destino = null;
+            $sku_fabrica = $variacao_fabrica->get_sku();
+            
+            if (!empty($sku_fabrica) && !empty($variacoes_destino)) {
+                foreach ($variacoes_destino as $var_dest) {
+                    if (isset($var_dest['sku']) && $var_dest['sku'] === $sku_fabrica) {
+                        $variacao_destino = $var_dest;
+                        break;
+                    }
+                }
+            }
+            
+            // Obter atributos da variação
+            $atributos = array();
+            $variation_attributes = $variacao_fabrica->get_variation_attributes();
+            
+            foreach ($variation_attributes as $attr_name => $attr_value) {
+                $attr_label = str_replace('attribute_', '', $attr_name);
+                $attr_label = str_replace('pa_', '', $attr_label);
+                $attr_label = ucfirst(str_replace('-', ' ', $attr_label));
+                
+                $atributos[] = array(
+                    'nome' => $attr_label,
+                    'valor' => $attr_value
+                );
+            }
+            
+            $variacoes[] = array(
+                'id_fabrica' => $variacao_fabrica->get_id(),
+                'id_destino' => $variacao_destino['id'] ?? null,
+                'sku' => $sku_fabrica,
+                'preco_fabrica' => $this->formatar_preco_produto($variacao_fabrica),
+                'preco_destino' => $this->formatar_preco_variacao_destino($variacao_destino),
+                'estoque_fabrica' => $variacao_fabrica->get_stock_quantity() ?: 0,
+                'estoque_destino' => $variacao_destino['stock_quantity'] ?? 0,
+                'atributos' => $atributos,
+                'status' => $variacao_destino ? 'sincronizado' : 'não_sincronizado'
+            );
+        }
+        
+        return $variacoes;
+    }
+    
+    /**
+     * Obter variações do produto no destino
+     */
+    private function get_variacoes_destino($lojista_data, $produto_id_destino) {
+        $url = trailingslashit($lojista_data['url']) . 'wp-json/wc/v3/products/' . $produto_id_destino . '/variations';
+        
+        $response = wp_remote_get($url, array(
+            'timeout' => 15,
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($lojista_data['consumer_key'] . ':' . $lojista_data['consumer_secret']),
+                'Content-Type' => 'application/json'
+            )
+        ));
+        
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+            return array();
+        }
+        
+        return json_decode(wp_remote_retrieve_body($response), true) ?: array();
+    }
+    
+    /**
+     * Formatar preço da variação no destino
+     */
+    private function formatar_preco_variacao_destino($variacao_destino) {
+        if (!$variacao_destino) {
+            return 0;
+        }
+        
+        // Primeiro tenta pegar o preço atual (com promoção se houver)
+        $preco = $variacao_destino['price'] ?? null;
+        
+        // Se não houver preço atual, pega o preço regular
+        if (empty($preco) || $preco === '' || $preco === '0') {
+            $preco = $variacao_destino['regular_price'] ?? null;
+        }
+        
+        return is_numeric($preco) && floatval($preco) > 0 ? floatval($preco) : 0;
+    }
+
+    /**
+     * Formatar preço do produto no destino
+     */
+    private function formatar_preco_destino($dados_destino) {
+        if (!$dados_destino) {
+            error_log("DEBUG PREÇO DESTINO: dados_destino é falso/vazio");
+            return 0;
+        }
+        
+        $preco_atual = $dados_destino['price'] ?? 'não definido';
+        $preco_regular = $dados_destino['regular_price'] ?? 'não definido';
+        error_log("DEBUG PREÇO DESTINO: price={$preco_atual}, regular_price={$preco_regular}");
+        
+        // Primeiro tenta pegar o preço atual (com promoção se houver)
+        $preco = $dados_destino['price'] ?? null;
+        
+        // Se não houver preço atual, pega o preço regular
+        if (empty($preco) || $preco === '' || $preco === '0') {
+            $preco = $dados_destino['regular_price'] ?? null;
+        }
+        
+        $preco_final = is_numeric($preco) && floatval($preco) > 0 ? floatval($preco) : 0;
+        error_log("DEBUG PREÇO DESTINO: preço final calculado = {$preco_final}");
+        
+        return $preco_final;
     }
     
     /**

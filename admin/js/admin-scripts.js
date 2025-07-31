@@ -16,6 +16,9 @@
     };
 
     $(document).ready(function() {
+        // Limpar modais órfãos imediatamente
+        limparModaisOrfaos();
+        
         console.log('=== SINCRONIZADOR WC DEBUG ===');
         console.log('SincronizadorWC object:', window.SincronizadorWC);
         console.log('SincronizadorWC carregado:', typeof SincronizadorWC !== 'undefined');
@@ -47,6 +50,13 @@
         console.log('=== INICIANDO SINCRONIZADOR ===');
         initSincronizador();
     });
+
+    // Função para limpar modais órfãos do DOM
+    function limparModaisOrfaos() {
+        // Remover todos os modais de progresso órfãos
+        $('.modal-overlay, #modal-progresso, #modal-relatorio').remove();
+        console.log('🧹 Modais órfãos removidos do DOM');
+    }
 
     function initSincronizador() {
         // Detectar qual página estamos
@@ -464,6 +474,32 @@
         const lojistaId = $("#lojista_destino").val();
         if (!lojistaId) return;
         
+        console.log('🔍 Validando configuração do lojista antes de carregar produtos sincronizados...');
+        
+        // Primeiro verificar se o lojista tem configuração válida
+        $.post(SincronizadorWC.ajaxurl, {
+            action: 'verificar_lojista_config',
+            lojista_id: lojistaId,
+            nonce: SincronizadorWC.nonce
+        })
+        .done(function(validationResponse) {
+            console.log('DEBUG: Validação do lojista para produtos sincronizados:', validationResponse);
+            
+            if (!validationResponse.success) {
+                alert('❌ ' + (validationResponse.data || 'Lojista não configurado corretamente. Configure a API key antes de carregar produtos.'));
+                return;
+            }
+            
+            // Se chegou até aqui, pode prosseguir com o carregamento
+            carregarProdutosSincronizados(lojistaId);
+        })
+        .fail(function(xhr, status, error) {
+            console.error('ERRO na validação do lojista:', {xhr, status, error});
+            alert('❌ Erro ao verificar configuração do lojista. Verifique se a API key está configurada corretamente.');
+        });
+    }
+    
+    function carregarProdutosSincronizados(lojistaId) {
         const btn = $("#btn-carregar-sincronizados");
         btn.prop("disabled", true).addClass("btn-loading");
         
@@ -477,11 +513,13 @@
                 renderProdutosSincronizados(response.data);
                 $("#tabela-sincronizados").show().addClass("fade-in");
                 $("#total-produtos").text(`(${response.data.length} produtos)`);
+                console.log('✅ Produtos sincronizados carregados:', response.data.length);
             } else {
-                alert("Erro ao carregar produtos: " + response.data);
+                alert("❌ Erro ao carregar produtos: " + response.data);
             }
-        }).fail(function() {
-            alert("Erro de comunicação com o servidor");
+        }).fail(function(xhr, status, error) {
+            console.error('ERRO ao carregar produtos sincronizados:', {xhr, status, error});
+            alert("❌ Erro de comunicação com o servidor");
         }).always(function() {
             btn.prop("disabled", false).removeClass("btn-loading");
         });
@@ -505,6 +543,10 @@
         produtos.forEach(function(produto) {
             const statusClass = produto.status === "sincronizado" ? "status-ativo" : "status-erro";
             const vendasText = produto.vendas !== null ? produto.vendas : "N/A";
+            const tipoProduto = produto.tipo_produto || 'simples';
+            const tipoIcon = tipoProduto === 'variável' ? '📦' : '📄';
+            const tipoClass = tipoProduto === 'variável' ? 'produto-tipo-variavel' : '';
+            const variacoesInfo = produto.tem_variacoes && produto.variacoes ? ` (${produto.variacoes.length} var.)` : '';
             
             const row = $(`
                 <tr>
@@ -517,7 +559,11 @@
                     <td><strong>${produto.id_fabrica}</strong></td>
                     <td>
                         <strong>${produto.nome}</strong><br>
-                        <small>SKU: ${produto.sku}</small>
+                        <small>SKU: ${produto.sku}</small><br>
+                        <small>
+                            ${tipoIcon} <span class="${tipoClass}">${tipoProduto}</span>
+                            ${variacoesInfo ? `<span class="produto-info-variacoes">${variacoesInfo}</span>` : ''}
+                        </small>
                     </td>
                     <td><strong>${produto.id_destino || "N/A"}</strong></td>
                     <td><span class="produto-status ${statusClass}">${produto.status}</span></td>
@@ -556,20 +602,61 @@
         
         titulo.text("Detalhes: " + produto.nome);
         
-        const detalhes = `
+        let detalhes = `
             <table class="form-table">
-                <tr><th>ID Fábrica:</th><td>${produto.id_fabrica}</td></tr>
-                <tr><th>ID Destino:</th><td>${produto.id_destino || "N/A"}</td></tr>
-                <tr><th>SKU:</th><td>${produto.sku}</td></tr>
+                <tr><th>ID Fábrica:</th><td><strong>${produto.id_fabrica}</strong></td></tr>
+                <tr><th>ID Destino:</th><td><strong>${produto.id_destino || "N/A"}</strong></td></tr>
+                <tr><th>SKU:</th><td><code>${produto.sku}</code></td></tr>
+                <tr><th>Tipo:</th><td><span class="produto-tipo" style="background: #f0f8ff; padding: 2px 8px; border-radius: 3px;">${produto.tipo_produto || 'simples'}</span></td></tr>
                 <tr><th>Status:</th><td><span class="produto-status ${produto.status === "sincronizado" ? "status-ativo" : "status-erro"}">${produto.status}</span></td></tr>
-                <tr><th>Preço Fábrica:</th><td>R$ ${formatPrice(produto.preco_fabrica || 0)}</td></tr>
-                <tr><th>Preço Destino:</th><td>R$ ${formatPrice(produto.preco_destino || 0)}</td></tr>
-                <tr><th>Estoque Fábrica:</th><td>${produto.estoque_fabrica || 0}</td></tr>
-                <tr><th>Estoque Destino:</th><td>${produto.estoque_destino || 0}</td></tr>
-                <tr><th>Vendas:</th><td>${produto.vendas !== null ? produto.vendas : "N/A"}</td></tr>
+                <tr><th>Preço Fábrica:</th><td><span style="color: #0073aa; font-weight: bold; font-size: 16px;">R$ ${formatPrice(produto.preco_fabrica)}</span></td></tr>
+                <tr><th>Preço Destino:</th><td><span style="color: #0073aa; font-weight: bold; font-size: 16px;">R$ ${formatPrice(produto.preco_destino)}</span></td></tr>
+                <tr><th>Estoque Fábrica:</th><td><span style="color: ${(produto.estoque_fabrica || 0) > 0 ? '#46b450' : '#dc3232'}; font-weight: bold;">${produto.estoque_fabrica || 0} unidades</span></td></tr>
+                <tr><th>Estoque Destino:</th><td><span style="color: ${(produto.estoque_destino || 0) > 0 ? '#46b450' : '#dc3232'}; font-weight: bold;">${produto.estoque_destino || 0} unidades</span></td></tr>
+                <tr><th>Vendas:</th><td><strong>${produto.vendas !== null ? produto.vendas : "N/A"}</strong></td></tr>
                 <tr><th>Última Sincronização:</th><td>${produto.ultima_sync || "Nunca"}</td></tr>
             </table>
         `;
+        
+        // Adicionar variações se existirem
+        if (produto.tem_variacoes && produto.variacoes && produto.variacoes.length > 0) {
+            detalhes += `
+                <h3 style="margin-top: 20px; color: #2271b1;">📦 Variações (${produto.variacoes.length})</h3>
+                <div class="variacoes-container">
+            `;
+            
+            produto.variacoes.forEach((variacao, index) => {
+                const statusVariacao = variacao.status === 'sincronizado' ? 'status-ativo' : 'status-erro';
+                const atributosText = variacao.atributos.map(attr => `${attr.nome}: ${attr.valor}`).join(', ');
+                
+                detalhes += `
+                    <div class="variacao-item" style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; background: #f9f9f9;">
+                        <div class="variacao-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h4 style="margin: 0; color: #1d2327;">Variação ${index + 1}</h4>
+                            <span class="produto-status ${statusVariacao}" style="font-size: 12px; padding: 3px 8px;">${variacao.status}</span>
+                        </div>
+                        <div class="variacao-details" style="font-size: 14px;">
+                            <p><strong>SKU:</strong> ${variacao.sku || 'N/A'}</p>
+                            <p><strong>Atributos:</strong> ${atributosText || 'Nenhum'}</p>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+                                <div>
+                                    <strong>🏭 Fábrica:</strong><br>
+                                    Preço: <span style="color: #0073aa; font-weight: bold;">R$ ${formatPrice(variacao.preco_fabrica)}</span><br>
+                                    Estoque: <span style="color: ${(variacao.estoque_fabrica || 0) > 0 ? '#46b450' : '#dc3232'};">${variacao.estoque_fabrica || 0} unidades</span>
+                                </div>
+                                <div>
+                                    <strong>🏪 Destino:</strong><br>
+                                    Preço: <span style="color: #0073aa; font-weight: bold;">R$ ${formatPrice(variacao.preco_destino)}</span><br>
+                                    Estoque: <span style="color: ${(variacao.estoque_destino || 0) > 0 ? '#46b450' : '#dc3232'};">${variacao.estoque_destino || 0} unidades</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            detalhes += `</div>`;
+        }
         
         conteudo.html(detalhes);
         modal.show().addClass("fade-in");
@@ -681,10 +768,20 @@
             }
         });
         
+        // Fechar modais de relatório e progresso
+        $(document).on('click', '[data-modal="relatorio"]', function(e) {
+            e.preventDefault();
+            $('#modal-relatorio').fadeOut(3000, function() {
+                $(this).remove();
+            });
+        });
+        
         // ESC para fechar modais
         $(document).on("keyup", function(e) {
             if (e.keyCode === 27) { // ESC
-                $(".sincronizador-modal").hide().removeClass("fade-in");
+                $(".sincronizador-modal, .modal-overlay").fadeOut(300, function() {
+                    $(this).remove();
+                });
             }
         });
         
@@ -922,7 +1019,27 @@
     }
 
     function formatPrice(price) {
-        return parseFloat(price || 0).toFixed(2).replace(".", ",");
+        // Verificar se o preço é válido
+        if (!price || price === '' || price === null || price === undefined) {
+            return '0,00';
+        }
+        
+        // Converter para string e limpar caracteres não numéricos (exceto ponto e vírgula)
+        let priceStr = String(price).replace(/[^\d.,]/g, '');
+        
+        // Substituir vírgula por ponto para parseFloat
+        priceStr = priceStr.replace(',', '.');
+        
+        // Converter para número
+        const priceNum = parseFloat(priceStr);
+        
+        // Verificar se é um número válido
+        if (isNaN(priceNum)) {
+            return '0,00';
+        }
+        
+        // Formatar com 2 casas decimais e trocar ponto por vírgula
+        return priceNum.toFixed(2).replace('.', ',');
     }
 
     function showNotice(message, type = 'success') {
@@ -944,6 +1061,9 @@
     
     // Sistema de progresso e sincronização
     function mostrarModalProgresso(lojistaName = 'Lojista') {
+        // Primeiro, remover todos os modais existentes
+        $('.modal-overlay, #modal-progresso').remove();
+        
         const modal = `
             <div id="modal-progresso" class="modal-overlay">
                 <div class="modal-content">
@@ -986,9 +1106,13 @@
     }
     
     function fecharModalProgresso() {
-        $('#modal-progresso').fadeOut(300, function() {
-            $(this).remove();
-        });
+        // Remover todos os modais de progresso existentes imediatamente
+        $('.modal-overlay, #modal-progresso').remove();
+        
+        // Garantir que não há modais restantes no DOM
+        setTimeout(() => {
+            $('[id*="modal-progresso"], .modal-overlay').remove();
+        }, 100);
     }
     
     function atualizarProgresso(porcentagem, texto, detalhes) {
@@ -1035,12 +1159,15 @@
     }
     
     function mostrarRelatorioSync(dados) {
+        // Remover modais de relatório existentes
+        $('#modal-relatorio').remove();
+        
         const relatorio = `
             <div id="modal-relatorio" class="modal-overlay">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h3>Relatório de Sincronização</h3>
-                        <button class="modal-close" onclick="$('#modal-relatorio').fadeOut(300, function(){ $(this).remove(); })">&times;</button>
+                        <button class="modal-close" data-modal="close">&times;</button>
                     </div>
                     <div class="modal-body">
                         <div class="relatorio-resumo">
@@ -1068,7 +1195,7 @@
         `;
         
         $('body').append(relatorio);
-        $('#modal-relatorio').fadeIn(300);
+        $('#modal-relatorio').fadeIn(3000);
     }
     
     // Event listeners para sincronização
@@ -1082,15 +1209,15 @@
             return;
         }
         
-        // Mostrar modal de progresso
-        mostrarModalProgresso();
-        
-        // Executar sincronização real
+        // Executar sincronização real (ela própria cuida do modal)
         executarSincronizacao(lojista);
     });
     
     function executarSincronizacao(lojistaId) {
         console.log('🚀 Iniciando sincronização para lojista:', lojistaId);
+        
+        // Limpar modais existentes completamente para evitar duplicatas
+        limparModaisOrfaos();
         
         // Verificar se o lojista existe e tem API key
         const lojistaRow = $(`.btn-sincronizar[data-lojista="${lojistaId}"]`).closest('tr');
@@ -1100,6 +1227,35 @@
             alert('❌ Lojista não encontrado!');
             return;
         }
+        
+        // Primeiro verificar se o lojista tem configuração válida
+        console.log('🔍 Verificando configuração do lojista...');
+        
+        $.post(SincronizadorWC.ajaxurl, {
+            action: 'verificar_lojista_config',
+            lojista_id: lojistaId,
+            nonce: SincronizadorWC.nonce
+        })
+        .done(function(validationResponse) {
+            console.log('DEBUG: Validação do lojista:', validationResponse);
+            
+            if (!validationResponse.success) {
+                alert('❌ ' + (validationResponse.data || 'Lojista não configurado corretamente'));
+                return;
+            }
+            
+            // Se chegou até aqui, pode prosseguir com a sincronização
+            iniciarProcessoSincronizacao(lojistaId, lojistaName);
+        })
+        .fail(function(xhr, status, error) {
+            console.error('ERRO na validação do lojista:', {xhr, status, error});
+            alert('❌ Erro ao verificar configuração do lojista. Verifique as configurações de API.');
+        });
+    }
+    
+    function iniciarProcessoSincronizacao(lojistaId, lojistaName) {
+        // Garantir que não há modais duplicados
+        limparModaisOrfaos();
         
         // Mostrar modal de progresso com informações do lojista
         mostrarModalProgresso(lojistaName);
@@ -1161,8 +1317,39 @@
         });
     }
 
+    // Event listeners globais para controle de modais
+    $(document).on('keydown', function(e) {
+        // ESC para fechar modais
+        if (e.keyCode === 27) {
+            fecharModalProgresso();
+            $('.modal-relatorio').fadeOut(300, function() {
+                $(this).remove();
+            });
+        }
+    });
+    
+    // Clique fora do modal para fechar (apenas para modal de relatório)
+    $(document).on('click', '.modal-overlay', function(e) {
+        if (e.target === this && $(this).attr('id') === 'modal-relatorio') {
+            $(this).fadeOut(300, function() {
+                $(this).remove();
+            });
+        }
+    });
+    
+    // Botão de fechar modal
+    $(document).on('click', '[data-modal="close"]', function() {
+        const modal = $(this).closest('.modal-overlay');
+        if (modal.attr('id') === 'modal-relatorio') {
+            modal.fadeOut(300, function() {
+                $(this).remove();
+            });
+        }
+    });
+
     // Expor funções globalmente se necessário
     window.SincronizadorWC.showNotice = showNotice;
     window.SincronizadorWC.formatPrice = formatPrice;
+    window.SincronizadorWC.limparModaisOrfaos = limparModaisOrfaos;
 
 })(jQuery);

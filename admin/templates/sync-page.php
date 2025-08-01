@@ -47,6 +47,14 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
         <div class="card">
             <h3>Produtos Sincronizados <span id="total-produtos"></span></h3>
             
+            <!-- Botão para limpar cache -->
+            <div style="margin-bottom: 15px;">
+                <button type="button" class="button button-secondary" id="btn-limpar-cache">
+                    🗑️ Limpar Cache
+                </button>
+                <span class="description">Clique para forçar o recarregamento dos produtos sincronizados</span>
+            </div>
+            
             <div class="tablenav top">
                 <div class="alignleft actions">
                     <input type="text" id="buscar-sincronizado" 

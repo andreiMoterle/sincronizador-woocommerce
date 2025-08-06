@@ -241,12 +241,16 @@
             
             produtosPagina.forEach(function(produto) {
                 const isDisabled = produto.status !== "ativo";
-                const precoFinal = produto.preco_promocional ? produto.preco_promocional : produto.preco;
-                const precoOriginal = produto.preco_promocional ? produto.preco : '';
                 
-                let precoHTML = `<span class="preco-atual">R$ ${formatPrice(precoFinal)}</span>`;
-                if (precoOriginal) {
-                    precoHTML += ` <del class="preco-original">R$ ${formatPrice(precoOriginal)}</del>`;
+                // Lógica correta de preços
+                let precoHTML;
+                if (produto.em_promocao && produto.preco_promocional > 0) {
+                    // Produto em promoção: mostra preço regular riscado e preço promocional
+                    precoHTML = `<del class="preco-original">R$ ${formatPrice(produto.preco)}</del> <span class="preco-promocional">R$ ${formatPrice(produto.preco_promocional)}</span>`;
+                } else {
+                    // Produto normal: mostra apenas o preço
+                    const precoFinal = produto.preco > 0 ? produto.preco : (produto.preco_promocional || 0);
+                    precoHTML = `<span class="preco-atual">R$ ${formatPrice(precoFinal)}</span>`;
                 }
                 
                 const card = $(`
@@ -335,7 +339,7 @@
                 <strong>📊 Resumo:</strong> 
                 ${produtos.length} produtos encontrados | 
                 ${produtos.filter(p => p.status === 'ativo').length} ativos | 
-                ${produtos.filter(p => p.preco_promocional).length} em promoção
+                ${produtos.filter(p => p.em_promocao === true).length} em promoção
             </div>
         `);
         
@@ -935,6 +939,11 @@
         // Botão carregar produtos (página de importação)
         $(document).on('click', '#btn-carregar-produtos', function() {
             loadProdutos();
+        });
+        
+        // Botão iniciar importação (página de importação)
+        $(document).on('click', '#btn-iniciar-importacao', function() {
+            startImport();
         });
         
         // Botão carregar sincronizados (página de produtos sincronizados)

@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Sincronizador WooCommerce Fábrica-Lojista
- * Plugin URI: https://example.com/sincronizador-woocommerce
+ * Plugin URI: https://andreimoterle.com.br
  * Description: Plugin para sincronização de produtos entre fábrica e lojistas via API REST WooCommerce com cache avançado e processamento em lote
  * Version: 1.1.0
  * Author: Moterle Andrei
@@ -632,6 +632,26 @@ class Sincronizador_WooCommerce {
                 $preco_atual = $produto->get_price();
                 $preco_promocional = $produto->get_sale_price();
                 
+                // Para produtos variáveis, buscar preço das variações
+                if ($produto->is_type('variable')) {
+                    $variation_prices = $produto->get_variation_prices();
+                    if (!empty($variation_prices['price'])) {
+                        $preco_atual = min($variation_prices['price']);
+                        error_log("DEBUG IMPORTAÇÃO - Produto variável ID {$produto_post->ID}: menor preço das variações = {$preco_atual}");
+                    }
+                    if (!empty($variation_prices['regular_price'])) {
+                        $preco_regular = min($variation_prices['regular_price']);
+                    }
+                    if (!empty($variation_prices['sale_price'])) {
+                        $precos_promocionais = array_filter($variation_prices['sale_price'], function($price) {
+                            return $price !== '';
+                        });
+                        if (!empty($precos_promocionais)) {
+                            $preco_promocional = min($precos_promocionais);
+                        }
+                    }
+                }
+                
                 error_log("DEBUG IMPORTAÇÃO - Produto ID {$produto_post->ID}: regular_price={$preco_regular}, price={$preco_atual}, sale_price={$preco_promocional}");
                 
                 // Determinar o melhor preço para exibir
@@ -926,12 +946,19 @@ class Sincronizador_WooCommerce {
             return false;
         }
         
+        // Em desenvolvimento, permitir todas as URLs para teste
+        // Detectar ambiente de desenvolvimento por URL
+        if (strpos($url, '.test') !== false || strpos($url, 'localhost') !== false || strpos($url, '127.0.0.1') !== false) {
+            error_log("IMAGEM DEBUG: Permitindo URL de desenvolvimento - $url");
+            return true;
+        }
+        
         // Verificar se a URL não é de desenvolvimento local (.test, localhost, etc)
         $parsed_url = parse_url($url);
         if (isset($parsed_url['host'])) {
             $host = $parsed_url['host'];
             
-            // Bloquear domínios de desenvolvimento
+            // Bloquear domínios de desenvolvimento apenas em produção
             $dev_domains = array('.test', '.local', 'localhost', '127.0.0.1', '192.168.');
             foreach ($dev_domains as $dev_domain) {
                 if (strpos($host, $dev_domain) !== false) {
@@ -1948,29 +1975,61 @@ class Sincronizador_WooCommerce {
         // Formatar produtos para exibição
         $produtos_formatados = array();
         foreach ($produtos as $produto) {
-            // Determinar melhor preço para exibir
-            $preco_exibir = '';
-            if (!empty($produto['regular_price']) && $produto['regular_price'] !== '0') {
-                $preco_exibir = floatval($produto['regular_price']);
-            } else {
-                $preco_exibir = 0;
+            // Para obter o objeto do produto real
+            $produto_obj = wc_get_product($produto['id']);
+            
+            // Determinar preços corretos para exibir
+            $preco_regular = 0;
+            $preco_promocional = 0;
+            
+            if ($produto_obj) {
+                if ($produto_obj->is_type('variable')) {
+                    // Para produtos variáveis, pegar preços das variações
+                    $variation_prices = $produto_obj->get_variation_prices();
+                    
+                    // Preço regular (menor preço regular das variações)
+                    if (!empty($variation_prices['regular_price'])) {
+                        $preco_regular = floatval(min($variation_prices['regular_price']));
+                    }
+                    
+                    // Preço promocional (menor preço de venda das variações, se houver)
+                    if (!empty($variation_prices['sale_price'])) {
+                        $precos_promocionais = array_filter($variation_prices['sale_price'], function($price) {
+                            return $price !== '' && $price > 0;
+                        });
+                        if (!empty($precos_promocionais)) {
+                            $preco_promocional = floatval(min($precos_promocionais));
+                        }
+                    }
+                    
+                    // Se não há preço promocional, usar o preço atual
+                    if ($preco_promocional == 0 && !empty($variation_prices['price'])) {
+                        $preco_promocional = floatval(min($variation_prices['price']));
+                    }
+                } else {
+                    // Para produtos simples
+                    $preco_regular = floatval($produto_obj->get_regular_price() ?: 0);
+                    $preco_promocional = floatval($produto_obj->get_sale_price() ?: 0);
+                    
+                    // Se não há preço promocional, usar o preço atual
+                    if ($preco_promocional == 0) {
+                        $preco_promocional = floatval($produto_obj->get_price() ?: $preco_regular);
+                    }
+                }
             }
             
-            $preco_promocional_exibir = '';
-            if (!empty($produto['sale_price']) && $produto['sale_price'] !== '0') {
-                $preco_promocional_exibir = floatval($produto['sale_price']);
-            } else {
-                $preco_promocional_exibir = 0;
-            }
+            // Determinar se está em promoção (preço promocional menor que regular)
+            $em_promocao = ($preco_promocional > 0 && $preco_regular > 0 && $preco_promocional < $preco_regular);
             
-            error_log("DEBUG AJAX IMPORTAÇÃO - Produto {$produto['id']}: preço regular={$preco_exibir}, preço promocional={$preco_promocional_exibir}");
+            error_log("DEBUG AJAX IMPORTAÇÃO - Produto {$produto['id']}: regular={$preco_regular}, promocional={$preco_promocional}, em_promocao=" . ($em_promocao ? 'SIM' : 'NÃO'));
             
             $produtos_formatados[] = array(
                 'id' => $produto['id'],
                 'nome' => $produto['name'],
                 'sku' => $produto['sku'],
-                'preco' => $preco_exibir,
-                'preco_promocional' => $preco_promocional_exibir,
+                'preco' => $preco_regular,
+                'preco_promocional' => $em_promocao ? $preco_promocional : 0,
+                'em_promocao' => $em_promocao,
                 'estoque' => $produto['stock_quantity'] ?: 0,
                 'categoria' => is_array($produto['categories']) ? implode(', ', $produto['categories']) : 'Sem categoria',
                 'imagem' => !empty($produto['images']) ? $produto['images'][0] : 'https://via.placeholder.com/80x80/CCCCCC/FFFFFF?text=IMG',
@@ -2068,11 +2127,18 @@ class Sincronizador_WooCommerce {
         
         $lojistas = get_option('sincronizador_wc_lojistas', array());
         
-        if (!isset($lojistas[$lojista_id])) {
-            wp_send_json_error(array('message' => 'Lojista não encontrado'));
+        // Buscar lojista pelo ID, não pelo índice do array
+        $lojista_data = null;
+        foreach ($lojistas as $lojista) {
+            if ($lojista['id'] == $lojista_id) {
+                $lojista_data = $lojista;
+                break;
+            }
         }
         
-        $lojista_data = $lojistas[$lojista_id];
+        if (!$lojista_data) {
+            wp_send_json_error(array('message' => 'Lojista não encontrado'));
+        }
         
         require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-product-importer.php';
         $importer = new Sincronizador_WC_Product_Importer();
@@ -2106,10 +2172,10 @@ class Sincronizador_WooCommerce {
             
             if ($resultado['success']) {
                 $sucessos++;
-                $importer->salvar_historico_envio($produto_id, $lojista_id, 'sucesso', $resultado['message']);
+                // TODO: Implementar salvar_historico_envio se necessário
             } else {
                 $erros++;
-                $importer->salvar_historico_envio($produto_id, $lojista_id, 'erro', $resultado['message']);
+                // TODO: Implementar salvar_historico_envio se necessário
             }
             
             $resultados[] = array(

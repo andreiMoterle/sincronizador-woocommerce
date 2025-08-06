@@ -789,10 +789,17 @@
     font-size: 16px;
 }
 
-.preco-original {
+.preco-promocional {
     color: #e74c3c;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.preco-original {
+    color: #999;
     font-size: 13px;
-    margin-left: 5px;
+    margin-right: 5px;
+    text-decoration: line-through;
 }
 
 .produto-status {

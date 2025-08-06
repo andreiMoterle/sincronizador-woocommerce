@@ -88,64 +88,49 @@ class Sincronizador_WC_Product_Importer {
         // Verificar se já existe
         $id_destino = $this->obter_id_destino_produto($produto_id, $destino_url);
         
+        // Carregar produto WooCommerce
+        $produto_wc = wc_get_product($produto_id);
+        if (!$produto_wc) {
+            return array(
+                'success' => false,
+                'message' => 'Produto não encontrado: ID ' . $produto_id
+            );
+        }
+        
         // Montar dados do produto
-        $data = $this->montar_dados_produto($produto, $opcoes);
+        $data = $this->montar_dados_produto($produto_wc, $opcoes);
         
         $log_prefix = '[Sincronizador WC] Produto "' . $produto['nome'] . '" - ';
         
-        if ($id_destino) {
-            // Atualizar produto existente
-            $url = trailingslashit($destino_url) . 'wp-json/wc/v3/products/' . $id_destino;
-            $response = wp_remote_request($url, array(
-                'method'  => 'PUT',
-                'headers' => $this->get_auth_headers($lojista['consumer_key'], $lojista['consumer_secret']),
-                'body'    => json_encode($data),
-                'timeout' => 30,
-            ));
-            
-            error_log($log_prefix . 'Atualizando produto (PUT)');
-        } else {
-            // Criar novo produto
-            $url = trailingslashit($destino_url) . 'wp-json/wc/v3/products';
-            $response = wp_remote_post($url, array(
-                'headers' => $this->get_auth_headers($lojista['consumer_key'], $lojista['consumer_secret']),
-                'body'    => json_encode($data),
-                'timeout' => 30,
-            ));
-            
-            error_log($log_prefix . 'Criando produto (POST)');
-        }
-        
-        if (is_wp_error($response)) {
-            error_log($log_prefix . 'Erro WP: ' . $response->get_error_message());
-            return array(
-                'success' => false,
-                'message' => 'Erro ao enviar "' . $produto['nome'] . '": ' . $response->get_error_message()
-            );
-        }
-        
-        $code = wp_remote_retrieve_response_code($response);
-        if ($code >= 300) {
-            $body = wp_remote_retrieve_body($response);
-            error_log($log_prefix . 'Erro HTTP ' . $code . ': ' . $body);
-            return array(
-                'success' => false,
-                'message' => 'Erro HTTP ' . $code . ' ao enviar "' . $produto['nome'] . '"'
-            );
-        }
-        
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $id_destino_novo = $body['id'] ?? null;
-        
-        if ($id_destino_novo) {
-            $this->registrar_envio_produto($produto_id, $destino_url, $id_destino_novo);
-        }
-        
-        return array(
-            'success' => true,
-            'product_id' => $id_destino_novo,
-            'message' => 'Produto "' . $produto['nome'] . '" importado com sucesso'
+        // Usar o método que resolve categorias automaticamente
+        $result = $this->importar_produto_para_destino(
+            $destino_url, 
+            $lojista['consumer_key'], 
+            $lojista['consumer_secret'], 
+            $data, 
+            $id_destino
         );
+        
+        if ($result['success']) {
+            error_log($log_prefix . ($id_destino ? 'Atualizado' : 'Criado') . ' com sucesso');
+            
+            // Registrar no histórico se for novo produto
+            if (!$id_destino && $result['product_id']) {
+                $this->registrar_envio_produto($produto_id, $destino_url, $result['product_id']);
+            }
+            
+            return array(
+                'success' => true,
+                'product_id' => $result['product_id'],
+                'message' => 'Produto "' . $produto['nome'] . '" importado com sucesso'
+            );
+        } else {
+            error_log($log_prefix . 'Erro: ' . $result['message']);
+            return array(
+                'success' => false,
+                'message' => 'Erro ao enviar "' . $produto['nome'] . '": ' . $result['message']
+            );
+        }
     }
     
     /**
@@ -379,6 +364,9 @@ class Sincronizador_WC_Product_Importer {
      * Montar dados do produto para envio
      */
     public function montar_dados_produto($produto, $opcoes = array()) {
+        // Log das opções recebidas
+        error_log('IMPORTAÇÃO DEBUG - Opções recebidas: ' . print_r($opcoes, true));
+        
         $dados = array(
             'name' => $produto->get_name(),
             'sku' => $produto->get_sku(),
@@ -410,39 +398,64 @@ class Sincronizador_WC_Product_Importer {
         
         // Categorias
         $categorias = wp_get_post_terms($produto->get_id(), 'product_cat');
+        error_log('IMPORTAÇÃO DEBUG - Categorias encontradas: ' . print_r($categorias, true));
         if (!empty($categorias)) {
             $dados['categories'] = array();
             foreach ($categorias as $categoria) {
                 $dados['categories'][] = array(
-                    'name' => $categoria->name
+                    'name' => $categoria->name,
+                    'slug' => $categoria->slug
                 );
+                error_log('IMPORTAÇÃO DEBUG - Categoria adicionada: ' . $categoria->name . ' (slug: ' . $categoria->slug . ')');
             }
+            error_log('IMPORTAÇÃO DEBUG - Total de categorias a serem enviadas: ' . count($dados['categories']));
+        } else {
+            error_log('IMPORTAÇÃO DEBUG - Nenhuma categoria encontrada para o produto');
         }
         
         // Imagens se solicitado
         if (isset($opcoes['incluir_imagens']) && $opcoes['incluir_imagens']) {
+            error_log('IMPORTAÇÃO DEBUG - Processando imagens para produto: ' . $produto->get_name());
             $images = array();
             
             // Imagem principal
             if ($produto->get_image_id()) {
                 $image_url = wp_get_attachment_image_url($produto->get_image_id(), 'full');
                 if ($image_url) {
-                    $images[] = array('src' => $image_url);
+                    // Pular URLs de desenvolvimento que o destino não consegue acessar
+                    if (strpos($image_url, '.test') !== false || strpos($image_url, 'localhost') !== false) {
+                        error_log('IMPORTAÇÃO DEBUG - Pulando imagem de desenvolvimento (destino não consegue acessar): ' . $image_url);
+                    } else {
+                        $images[] = array('src' => $image_url);
+                        error_log('IMPORTAÇÃO DEBUG - Imagem principal adicionada: ' . $image_url);
+                    }
                 }
             }
             
             // Galeria
             $gallery_ids = $produto->get_gallery_image_ids();
+            error_log('IMPORTAÇÃO DEBUG - IDs da galeria: ' . print_r($gallery_ids, true));
             foreach ($gallery_ids as $image_id) {
                 $image_url = wp_get_attachment_image_url($image_id, 'full');
                 if ($image_url) {
-                    $images[] = array('src' => $image_url);
+                    // Pular URLs de desenvolvimento que o destino não consegue acessar
+                    if (strpos($image_url, '.test') !== false || strpos($image_url, 'localhost') !== false) {
+                        error_log('IMPORTAÇÃO DEBUG - Pulando imagem da galeria de desenvolvimento: ' . $image_url);
+                    } else {
+                        $images[] = array('src' => $image_url);
+                        error_log('IMPORTAÇÃO DEBUG - Imagem da galeria adicionada: ' . $image_url);
+                    }
                 }
             }
             
             if (!empty($images)) {
                 $dados['images'] = $images;
+                error_log('IMPORTAÇÃO DEBUG - Total de imagens a serem enviadas: ' . count($images));
+            } else {
+                error_log('IMPORTAÇÃO DEBUG - Nenhuma imagem válida encontrada (URLs de desenvolvimento puladas)');
             }
+        } else {
+            error_log('IMPORTAÇÃO DEBUG - Incluir imagens está DESABILITADO ou não foi passado');
         }
         
         // Atributos
@@ -470,13 +483,18 @@ class Sincronizador_WC_Product_Importer {
         
         // Variações se for produto variável e solicitado
         if ($produto->is_type('variable') && isset($opcoes['incluir_variacoes']) && $opcoes['incluir_variacoes']) {
+            error_log('IMPORTAÇÃO DEBUG - Processando variações para produto variável: ' . $produto->get_name());
             $variation_ids = $produto->get_children();
-            $dados['variations'] = array();
+            error_log('IMPORTAÇÃO DEBUG - IDs das variações encontradas: ' . print_r($variation_ids, true));
+            
+            // IMPORTANTE: As variações não devem ser incluídas no array principal do produto
+            // Elas serão criadas separadamente após o produto principal ser criado
+            $dados['_variations_data'] = array(); // Campo temporário para armazenar dados das variações
             
             foreach ($variation_ids as $variation_id) {
                 $variation = wc_get_product($variation_id);
                 if ($variation) {
-                    $dados['variations'][] = array(
+                    $variation_data = array(
                         'sku' => $variation->get_sku(),
                         'regular_price' => $variation->get_regular_price(),
                         'sale_price' => $variation->get_sale_price(),
@@ -485,9 +503,22 @@ class Sincronizador_WC_Product_Importer {
                         'stock_status' => $variation->get_stock_status(),
                         'attributes' => $variation->get_variation_attributes()
                     );
+                    $dados['_variations_data'][] = $variation_data;
+                    error_log('IMPORTAÇÃO DEBUG - Variação adicionada: SKU=' . $variation->get_sku() . ', Preço=' . $variation->get_regular_price());
                 }
             }
+            
+            error_log('IMPORTAÇÃO DEBUG - Total de variações a serem criadas separadamente: ' . count($dados['_variations_data']));
+        } else {
+            if ($produto->is_type('variable')) {
+                error_log('IMPORTAÇÃO DEBUG - Produto é variável mas incluir_variacoes está DESABILITADO');
+            } else {
+                error_log('IMPORTAÇÃO DEBUG - Produto não é variável (tipo: ' . $produto->get_type() . ')');
+            }
         }
+        
+        // Log dos dados finais
+        error_log('IMPORTAÇÃO DEBUG - Dados finais do produto a serem enviados: ' . print_r($dados, true));
         
         return $dados;
     }
@@ -496,6 +527,22 @@ class Sincronizador_WC_Product_Importer {
      * Importar produto para destino (usando as credenciais diretamente)
      */
     public function importar_produto_para_destino($destino_url, $consumer_key, $consumer_secret, $dados_produto, $id_destino = null) {
+        // Separar dados das variações (se existirem) do produto principal
+        $variations_data = null;
+        if (isset($dados_produto['_variations_data'])) {
+            $variations_data = $dados_produto['_variations_data'];
+            unset($dados_produto['_variations_data']); // Remover do payload principal
+            error_log('IMPORTAÇÃO DEBUG - Separando dados das variações para criação posterior');
+        }
+        
+        // Resolver categorias no destino (buscar por slug ou criar)
+        if (isset($dados_produto['categories']) && !empty($dados_produto['categories'])) {
+            error_log('IMPORTAÇÃO DEBUG - Resolvendo categorias no destino...');
+            $categorias_resolvidas = $this->resolver_categorias_destino($destino_url, $consumer_key, $consumer_secret, $dados_produto['categories']);
+            $dados_produto['categories'] = $categorias_resolvidas;
+            error_log('IMPORTAÇÃO DEBUG - Categorias resolvidas: ' . count($categorias_resolvidas));
+        }
+        
         if ($id_destino) {
             // Atualizar produto existente
             $url = trailingslashit($destino_url) . 'wp-json/wc/v3/products/' . $id_destino;
@@ -538,12 +585,161 @@ class Sincronizador_WC_Product_Importer {
         }
         
         $body = json_decode(wp_remote_retrieve_body($response), true);
+        $product_id = $body['id'] ?? null;
         
-        return array(
+        $result = array(
             'success' => true,
-            'product_id' => $body['id'] ?? null,
+            'product_id' => $product_id,
             'message' => 'Produto ' . ($id_destino ? 'atualizado' : 'criado') . ' com sucesso'
         );
+        
+        // Se há variações e o produto foi criado/atualizado com sucesso, criar as variações
+        if ($variations_data && $product_id) {
+            error_log('IMPORTAÇÃO DEBUG - Criando variações para produto ID: ' . $product_id);
+            $variations_result = $this->criar_variacoes_produto($destino_url, $consumer_key, $consumer_secret, $product_id, $variations_data);
+            
+            if ($variations_result['success']) {
+                $result['message'] .= ' com ' . $variations_result['created_count'] . ' variações';
+                error_log('IMPORTAÇÃO DEBUG - Variações criadas com sucesso: ' . $variations_result['created_count']);
+            } else {
+                $result['message'] .= ' mas falhou ao criar variações: ' . $variations_result['message'];
+                error_log('IMPORTAÇÃO DEBUG - Erro ao criar variações: ' . $variations_result['message']);
+            }
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Criar variações para um produto
+     */
+    private function criar_variacoes_produto($destino_url, $consumer_key, $consumer_secret, $product_id, $variations_data) {
+        $created_count = 0;
+        $errors = array();
+        
+        foreach ($variations_data as $variation_data) {
+            $url = trailingslashit($destino_url) . 'wp-json/wc/v3/products/' . $product_id . '/variations';
+            
+            $response = wp_remote_post($url, array(
+                'headers' => array(
+                    'Authorization' => 'Basic ' . base64_encode($consumer_key . ':' . $consumer_secret),
+                    'Content-Type' => 'application/json'
+                ),
+                'body'    => json_encode($variation_data),
+                'timeout' => 30,
+            ));
+            
+            if (is_wp_error($response)) {
+                $errors[] = 'Erro ao criar variação: ' . $response->get_error_message();
+                continue;
+            }
+            
+            $code = wp_remote_retrieve_response_code($response);
+            if ($code >= 300) {
+                $body = wp_remote_retrieve_body($response);
+                $errors[] = 'Erro HTTP ' . $code . ' ao criar variação: ' . $body;
+                continue;
+            }
+            
+            $created_count++;
+        }
+        
+        if (count($errors) === 0) {
+            return array(
+                'success' => true,
+                'created_count' => $created_count,
+                'message' => $created_count . ' variações criadas com sucesso'
+            );
+        } else {
+            return array(
+                'success' => false,
+                'created_count' => $created_count,
+                'message' => 'Criadas ' . $created_count . ' variações, ' . count($errors) . ' falharam: ' . implode(', ', $errors)
+            );
+        }
+    }
+    
+    /**
+     * Resolver categorias no destino (buscar por slug ou criar)
+     */
+    private function resolver_categorias_destino($destino_url, $consumer_key, $consumer_secret, $categorias) {
+        $categorias_resolvidas = array();
+        
+        foreach ($categorias as $categoria_data) {
+            // Buscar categoria existente por slug
+            $categoria_id = $this->buscar_categoria_por_slug($destino_url, $consumer_key, $consumer_secret, $categoria_data['slug']);
+            
+            if ($categoria_id) {
+                error_log('IMPORTAÇÃO DEBUG - Categoria encontrada no destino: ' . $categoria_data['name'] . ' (ID: ' . $categoria_id . ')');
+                $categorias_resolvidas[] = array('id' => $categoria_id);
+            } else {
+                // Criar nova categoria
+                $nova_categoria_id = $this->criar_categoria_destino($destino_url, $consumer_key, $consumer_secret, $categoria_data);
+                if ($nova_categoria_id) {
+                    error_log('IMPORTAÇÃO DEBUG - Categoria criada no destino: ' . $categoria_data['name'] . ' (ID: ' . $nova_categoria_id . ')');
+                    $categorias_resolvidas[] = array('id' => $nova_categoria_id);
+                } else {
+                    error_log('IMPORTAÇÃO DEBUG - Falha ao criar categoria no destino: ' . $categoria_data['name']);
+                }
+            }
+        }
+        
+        return $categorias_resolvidas;
+    }
+    
+    /**
+     * Buscar categoria por slug no destino
+     */
+    private function buscar_categoria_por_slug($destino_url, $consumer_key, $consumer_secret, $slug) {
+        $url = trailingslashit($destino_url) . 'wp-json/wc/v3/products/categories?slug=' . urlencode($slug);
+        
+        $response = wp_remote_get($url, array(
+            'timeout' => 30,
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($consumer_key . ':' . $consumer_secret),
+                'Content-Type' => 'application/json'
+            )
+        ));
+        
+        if (is_wp_error($response)) {
+            return false;
+        }
+        
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if (!empty($body) && is_array($body) && isset($body[0]['id'])) {
+            return $body[0]['id'];
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Criar categoria no destino
+     */
+    private function criar_categoria_destino($destino_url, $consumer_key, $consumer_secret, $categoria_data) {
+        $url = trailingslashit($destino_url) . 'wp-json/wc/v3/products/categories';
+        
+        $response = wp_remote_post($url, array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($consumer_key . ':' . $consumer_secret),
+                'Content-Type' => 'application/json'
+            ),
+            'body'    => json_encode($categoria_data),
+            'timeout' => 30,
+        ));
+        
+        if (is_wp_error($response)) {
+            return false;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code >= 300) {
+            return false;
+        }
+        
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        return $body['id'] ?? false;
     }
     
     private function get_produtos_fabrica() {

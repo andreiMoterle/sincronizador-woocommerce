@@ -48,9 +48,6 @@ Plugin profissional para WordPress que permite a sincronização completa de pro
 ### Passos de Instalação
 
 1. **Faça o download do plugin**
-   ```bash
-   git clone https://github.com/seu-usuario/sincronizador-woocommerce.git
-   ```
 
 2. **Envie para o WordPress**
    - Faça upload da pasta `sincronizador-woocommerce` para `/wp-content/plugins/`

@@ -1548,7 +1548,8 @@ class Sincronizador_WooCommerce {
         add_action('wp_ajax_sincronizador_wc_validate_lojista', array($this, 'ajax_validate_lojista'));
         add_action('wp_ajax_sincronizador_wc_test_connection', array($this, 'ajax_test_connection'));
         add_action('wp_ajax_sincronizador_wc_get_produtos_fabrica', array($this, 'ajax_get_produtos_fabrica'));
-        add_action('wp_ajax_sincronizador_wc_import_produtos', array($this, 'ajax_import_produtos'));
+        // REDIRECIONAMENTO TEMPORÁRIO PARA A CLASSE CORRETA
+        add_action('wp_ajax_sincronizador_wc_import_produtos', array($this, 'ajax_import_produtos_redirect'));
         
         // AJAX handlers para sincronização
         add_action('wp_ajax_verificar_lojista_config', array($this, 'ajax_verificar_lojista_config'));
@@ -2109,90 +2110,30 @@ class Sincronizador_WooCommerce {
         ));
     }
     
+    // *** FUNÇÃO AJAX REMOVIDA - USAR APENAS DA CLASSE Product_Importer ***
+    // ajax_import_produtos() foi removida para evitar conflitos
+    // A classe Product_Importer tem toda a lógica de verificação de duplicatas
+    
     /**
-     * AJAX: Importar produtos selecionados
+     * REDIRECIONAMENTO TEMPORÁRIO - Chama a classe correta para importação
      */
-    public function ajax_import_produtos() {
-        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+    public function ajax_import_produtos_redirect() {
+        error_log('SINCRONIZADOR-WC: REDIRECIONAMENTO - Classe principal recebeu AJAX, redirecionando para Product_Importer');
         
-        if (!current_user_can('manage_woocommerce')) {
-            wp_die('Sem permissão');
-        }
-        
-        $lojista_id = intval($_POST['lojista_destino']);
-        $produtos_ids = array_map('intval', $_POST['produtos_selecionados']);
-        $incluir_variacoes = isset($_POST['incluir_variacoes']) && $_POST['incluir_variacoes'] == '1';
-        $incluir_imagens = isset($_POST['incluir_imagens']) && $_POST['incluir_imagens'] == '1';
-        $manter_precos = isset($_POST['manter_precos']) && $_POST['manter_precos'] == '1';
-        
-        $lojistas = get_option('sincronizador_wc_lojistas', array());
-        
-        // Buscar lojista pelo ID, não pelo índice do array
-        $lojista_data = null;
-        foreach ($lojistas as $lojista) {
-            if ($lojista['id'] == $lojista_id) {
-                $lojista_data = $lojista;
-                break;
-            }
-        }
-        
-        if (!$lojista_data) {
-            wp_send_json_error(array('message' => 'Lojista não encontrado'));
-        }
-        
-        require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-product-importer.php';
-        $importer = new Sincronizador_WC_Product_Importer();
-        
-        $resultados = array();
-        $sucessos = 0;
-        $erros = 0;
-        
-        foreach ($produtos_ids as $produto_id) {
-            $produto = wc_get_product($produto_id);
-            if (!$produto) {
-                continue;
-            }
-            
-            $dados_produto = $importer->montar_dados_produto($produto, array(
-                'incluir_variacoes' => $incluir_variacoes,
-                'incluir_imagens' => $incluir_imagens,
-                'manter_precos' => $manter_precos
-            ));
-            
-            // Verificar se produto já existe no destino
-            $id_destino = $importer->buscar_produto_por_sku($lojista_data['url'], $lojista_data['consumer_key'], $lojista_data['consumer_secret'], $produto->get_sku());
-            
-            $resultado = $importer->importar_produto_para_destino(
-                $lojista_data['url'],
-                $lojista_data['consumer_key'],
-                $lojista_data['consumer_secret'],
-                $dados_produto,
-                $id_destino
-            );
-            
-            if ($resultado['success']) {
-                $sucessos++;
-                // TODO: Implementar salvar_historico_envio se necessário
+        if (class_exists('Sincronizador_WC_Product_Importer')) {
+            $importer = new Sincronizador_WC_Product_Importer();
+            if (method_exists($importer, 'ajax_import_produtos')) {
+                error_log('SINCRONIZADOR-WC: REDIRECIONAMENTO - Chamando Product_Importer->ajax_import_produtos()');
+                $importer->ajax_import_produtos();
+                return;
             } else {
-                $erros++;
-                // TODO: Implementar salvar_historico_envio se necessário
+                error_log('SINCRONIZADOR-WC: REDIRECIONAMENTO - ERRO: Método ajax_import_produtos não existe na classe Product_Importer');
             }
-            
-            $resultados[] = array(
-                'produto_id' => $produto_id,
-                'produto_nome' => $produto->get_name(),
-                'success' => $resultado['success'],
-                'message' => $resultado['message']
-            );
+        } else {
+            error_log('SINCRONIZADOR-WC: REDIRECIONAMENTO - ERRO: Classe Sincronizador_WC_Product_Importer não existe');
         }
         
-        wp_send_json_success(array(
-            'import_id' => uniqid(),
-            'total' => count($produtos_ids),
-            'sucessos' => $sucessos,
-            'erros' => $erros,
-            'detalhes' => $resultados
-        ));
+        wp_send_json_error(array('message' => 'Handler de importação não encontrado'));
     }
     
     /**

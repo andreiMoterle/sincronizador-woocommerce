@@ -103,7 +103,7 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
                     <div class="opcao-descricao">
                         Preserva os preços da fábrica sem alterações
                     </div>
-                </div>
+                </div>                               
             </div>
         </div>
     </div>
@@ -124,7 +124,9 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
     <div class="sincronizador-modal-content">
         <div id="modal-resultado-conteudo"></div>
         <div class="sincronizador-modal-footer">
-            <button type="button" class="button modal-close">Fechar</button>
+            <button type="button" class="button modal-close" aria-label="Fechar">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
     </div>
 </div>

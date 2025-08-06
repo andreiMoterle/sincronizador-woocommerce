@@ -260,7 +260,6 @@
 }
 
 .progress-text {
-    position: absolute;
     width: 100%;
     text-align: center;
     line-height: 20px;
@@ -500,16 +499,24 @@
 }
 
 .modal-close {
+    position: absolute;
+    top: 10px;
+    display: flex !important;
     background: none;
     border: none;
-    font-size: 28px !important; /* Maior para ser mais visível */
     cursor: pointer;
-    color: #666;
+    color: #666 !important;
     padding: 5px;
-    width: 40px !important; /* Área clicável maior */
-    height: 40px !important;
+    width: 30px !important;
+    height: 30px !important;
     text-align: center;
     border-radius: 50% !important;
+    transition: all 0.2s ease;
+    justify-content: center;
+    align-items: center;
+    border: none !important;
+    font-size: 15px !important;
+    right: 10px;
     transition: all 0.2s ease;
 }
 

@@ -109,9 +109,13 @@
     function initImportPage() {
         let currentImportId = null;
         let progressInterval = null;
-
-        // Os eventos agora são tratados na função initGlobalEvents()
-        // Apenas configurações específicas aqui
+        
+        // Forçar valores padrão das checkboxes após o DOM estar carregado
+        setTimeout(function() {
+            $("#incluir_variacoes").prop("checked", true);
+            $("#incluir_imagens").prop("checked", true);
+            $("#manter_precos").prop("checked", true);
+        }, 100);
         
         setupProductEvents();
     }
@@ -407,30 +411,98 @@
             alert("Selecione pelo menos um produto!");
             return;
         }
+
+        // Obter nome do lojista para o modal
+        const lojistaId = $("#lojista_destino").val();
+        const lojistaOption = $("#lojista_destino option:selected");
+        const lojistaName = lojistaOption.text() || 'Lojista';
+        
+        // Mostrar modal de progresso
+        mostrarModalProgresso(lojistaName);
         
         const dados = {
             action: "sincronizador_wc_import_produtos",
             nonce: SincronizadorWC.nonce,
-            lojista_destino: $("#lojista_destino").val(),
+            lojista_destino: lojistaId,
             produtos_selecionados: produtosSelecionados,
             incluir_variacoes: $("#incluir_variacoes").is(":checked") ? 1 : 0,
             incluir_imagens: $("#incluir_imagens").is(":checked") ? 1 : 0,
             manter_precos: $("#manter_precos").is(":checked") ? 1 : 0
+            // pular_duplicados removido - será sempre TRUE no backend
         };
+        
+        // Debug: verificar se está enviando pular_duplicados corretamente
+        console.log('IMPORTAÇÃO - Dados enviados:', dados);
         
         $("#btn-iniciar-importacao").prop("disabled", true).addClass("btn-loading");
         
+        // Atualizar contadores de progresso
+        updateProgressDetails(produtosSelecionados.length, 0, 0, 0);
+        
+        // PROGRESSO IMEDIATO: Mostrar estatísticas enquanto processa
+        let currentProgress = 0;
+        let progressSimulator = setInterval(function() {
+            currentProgress = Math.min(currentProgress + Math.random() * 8, 90);
+            $('.progress-fill').css('width', currentProgress + '%');
+            $('.progress-percentage').text(Math.round(currentProgress) + '%');
+            
+            // Simular contadores incrementais (estimativa)
+            const totalProdutos = produtosSelecionados.length;
+            const progressRatio = currentProgress / 100;
+            const processedCount = Math.floor(totalProdutos * progressRatio);
+            
+            $('#produtos-encontrados').text(totalProdutos);
+            $('#produtos-sincronizados').text(processedCount);
+            
+            // Sempre mostrar como processamento rápido (pular duplicados sempre ativo)
+            $('.progress-text').text('Verificando produtos duplicados...');
+        }, 300); // Progresso mais rápido
+        
         $.post(SincronizadorWC.ajaxurl, dados, function(response) {
+            // Finalizar progresso
+            clearInterval(progressSimulator);
+            $('.progress-fill').css('width', '100%');
+            $('.progress-percentage').text('100%');
+            $('.progress-text').text('Importação concluída!');
+            
+            // Atualizar estatísticas finais
             if (response.success) {
-                showImportResults(response.data);
-            } else {
-                alert("Erro ao iniciar importação: " + response.data.message);
+                const data = response.data;
+                updateProgressDetails(
+                    produtosSelecionados.length,
+                    data.sucessos + (data.pulados || 0),
+                    data.sucessos,
+                    data.sucessos
+                );
             }
+            
+            // Aguardar um pouco antes de fechar
+            setTimeout(function() {
+                fecharModalProgresso();
+                
+                if (response.success) {
+                    showImportResults(response.data);
+                } else {
+                    alert("Erro ao iniciar importação: " + response.data.message);
+                }
+            }, 1500);
+            
         }).fail(function() {
+            // Parar progresso e fechar modal em caso de erro
+            clearInterval(progressSimulator);
+            fecharModalProgresso();
             alert("Erro de comunicação com o servidor");
         }).always(function() {
             $("#btn-iniciar-importacao").prop("disabled", false).removeClass("btn-loading");
         });
+    }
+    
+    // Função para atualizar detalhes do progresso
+    function updateProgressDetails(found, synced, created, updated) {
+        $('#produtos-encontrados').text(found);
+        $('#produtos-sincronizados').text(synced);
+        $('#produtos-criados').text(created);
+        $('#produtos-atualizados').text(updated);
     }
 
     function showImportResults(data) {
@@ -440,13 +512,39 @@
         let html = `
             <h3>Resultado da Importação</h3>
             <div class="import-summary">
-                <p><strong>Total:</strong> ${data.total} produtos</p>
+                <p><strong>Total:</strong> ${data.total || (data.sucessos + data.erros + (data.pulados || 0))} produtos</p>
                 <p><strong>Sucessos:</strong> <span style="color: green">${data.sucessos}</span></p>
                 <p><strong>Erros:</strong> <span style="color: red">${data.erros}</span></p>
-            </div>
         `;
         
-        if (data.detalhes && data.detalhes.length > 0) {
+        if (data.pulados && data.pulados > 0) {
+            html += `<p><strong>Pulados:</strong> <span style="color: orange">${data.pulados}</span></p>`;
+        }
+        
+        html += '</div>';
+        
+        if (data.logs && data.logs.length > 0) {
+            html += '<div class="import-details"><h4>Detalhes:</h4><ul>';
+            data.logs.forEach(function(item) {
+                let icon = '❓';
+                let color = 'black';
+                
+                if (item.type === 'success') {
+                    icon = '✅';
+                    color = 'green';
+                } else if (item.type === 'error') {
+                    icon = '❌';
+                    color = 'red';
+                } else if (item.type === 'info') {
+                    icon = '⏭️';
+                    color = 'orange';
+                }
+                
+                html += `<li style="color: ${color}">${icon} ${item.message}</li>`;
+            });
+            html += '</ul></div>';
+        } else if (data.detalhes && data.detalhes.length > 0) {
+            // Fallback para estrutura antiga
             html += '<div class="import-details"><h4>Detalhes:</h4><ul>';
             data.detalhes.forEach(function(item) {
                 const icon = item.success ? '✅' : '❌';

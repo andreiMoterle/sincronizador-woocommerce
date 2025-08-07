@@ -1,6 +1,7 @@
 <?php
 /**
- * Classe para gerenciar chamadas da API WooCommerce
+ * Classe para gerenciar chamadas da API WooCommerce - REFATORADA
+ * Agora usa as classes utilitárias para evitar duplicação
  */
 
 if (!defined('ABSPATH')) {
@@ -11,59 +12,51 @@ class Sincronizador_WC_API_Handler {
     
     private $lojista_data;
     
+    /**
+     * Instâncias das classes utilitárias
+     */
+    private $product_utils;
+    private $api_operations;
+    
     public function __construct($lojista_data = null) {
         $this->lojista_data = $lojista_data;
+        
+        // Inicializar classes utilitárias
+        $this->product_utils = Sincronizador_WC_Product_Utils::get_instance();
+        $this->api_operations = Sincronizador_WC_API_Operations::get_instance();
     }
     
     /**
-     * Conecta à API do lojista
+     * MÉTODO REMOVIDO: get_api_client()
+     * 
+     * Este método foi removido pois agora usamos as novas classes utilitárias:
+     * - Sincronizador_WC_API_Operations para operações de API
+     * - wp_remote_get/wp_remote_post nativos do WordPress
+     * 
+     * Isso elimina a dependência de bibliotecas externas e melhora a performance.
      */
-    private function get_api_client($lojista_id = null) {
-        if ($lojista_id) {
-            global $wpdb;
-            $lojista = $wpdb->get_row($wpdb->prepare(
-                "SELECT * FROM {$wpdb->prefix}sincronizador_lojistas WHERE id = %d",
-                $lojista_id
-            ));
-            
-            if (!$lojista) {
-                throw new Exception(__('Lojista não encontrado', 'sincronizador-wc'));
-            }
-            
-            $this->lojista_data = $lojista;
-        }
-        
-        if (!$this->lojista_data) {
-            throw new Exception(__('Dados do lojista não fornecidos', 'sincronizador-wc'));
-        }
-        
-        require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'vendor/autoload.php';
-        
-        return new Automattic\WooCommerce\Client(
-            $this->lojista_data->url_loja,
-            $this->lojista_data->consumer_key,
-            $this->lojista_data->consumer_secret,
-            [
-                'wp_api' => true,
-                'version' => 'wc/v3',
-                'timeout' => 30
-            ]
-        );
-    }
     
     /**
-     * Testa conexão com a API do lojista
+     * Testa conexão com a API do lojista - REFATORADO
+     * Agora usa a classe de operações de API
      */
     public function test_connection($lojista_id) {
         try {
-            $client = $this->get_api_client($lojista_id);
-            $response = $client->get('system_status');
+            // Buscar dados do lojista
+            $lojista = $this->get_lojista_data($lojista_id);
             
-            if (isset($response->environment)) {
-                return array('success' => true, 'message' => __('Conexão estabelecida com sucesso', 'sincronizador-wc'));
+            if (!$lojista) {
+                return array('success' => false, 'message' => __('Lojista não encontrado', 'sincronizador-wc'));
             }
             
-            return array('success' => false, 'message' => __('Resposta inválida da API', 'sincronizador-wc'));
+            // Usar a nova classe de operações
+            $result = $this->api_operations->testar_conexao_lojista($lojista);
+            
+            if ($result['success']) {
+                return array('success' => true, 'message' => __('Conexão estabelecida com sucesso', 'sincronizador-wc'));
+            } else {
+                return array('success' => false, 'message' => $result['message']);
+            }
             
         } catch (Exception $e) {
             return array('success' => false, 'message' => $e->getMessage());
@@ -71,11 +64,17 @@ class Sincronizador_WC_API_Handler {
     }
     
     /**
-     * Envia produto para o lojista
+     * Envia produto para o lojista - REFATORADO
+     * Agora usa as novas classes utilitárias para preparar dados e enviar
      */
     public function send_product_to_lojista($produto_id, $lojista_id) {
         try {
-            $client = $this->get_api_client($lojista_id);
+            // Buscar dados do lojista
+            $lojista = $this->get_lojista_data($lojista_id);
+            
+            if (!$lojista) {
+                throw new Exception(__('Lojista não encontrado', 'sincronizador-wc'));
+            }
             
             // Obter dados do produto da fábrica
             $produto = wc_get_product($produto_id);
@@ -84,70 +83,15 @@ class Sincronizador_WC_API_Handler {
                 throw new Exception(__('Produto não encontrado', 'sincronizador-wc'));
             }
             
-            // Preparar dados do produto
-            $product_data = $this->prepare_product_data($produto);
+            // Usar a classe utilitária para formatar dados do produto
+            $product_data = $this->product_utils->format_product_data($produto);
             
-            // Verificar se produto já existe no lojista (por SKU)
-            $existing_products = $client->get('products', ['sku' => $produto->get_sku()]);
-            
-            if (!empty($existing_products)) {
-                // Atualizar produto existente
-                $response = $client->put('products/' . $existing_products[0]->id, $product_data);
-                $action = 'updated';
-            } else {
-                // Criar novo produto
-                $response = $client->post('products', $product_data);
-                $action = 'created';
+            if (!$product_data) {
+                throw new Exception(__('Erro ao formatar dados do produto', 'sincronizador-wc'));
             }
             
-            // Registrar na tabela de sincronização
-            $this->update_sync_record($lojista_id, $produto_id, $response->id, $produto->get_sku(), 'sincronizado');
-            
-            // Log da operação
-            $this->log_operation($lojista_id, 'importacao', "Produto {$action}: {$produto->get_name()} (SKU: {$produto->get_sku()})");
-            
-            return array(
-                'success' => true,
-                'message' => sprintf(__('Produto %s com sucesso', 'sincronizador-wc'), $action === 'created' ? 'criado' : 'atualizado'),
-                'product_id' => $response->id
-            );
-            
-        } catch (Exception $e) {
-            // Registrar erro na sincronização
-            $this->update_sync_record($lojista_id, $produto_id, null, $produto->get_sku(), 'erro', $e->getMessage());
-            
-            // Log do erro
-            $this->log_operation($lojista_id, 'erro', "Erro ao enviar produto: {$e->getMessage()}");
-            
-            return array('success' => false, 'message' => $e->getMessage());
-        }
-    }
-    
-    /**
-     * Prepara dados do produto para envio
-     */
-    private function prepare_product_data($produto) {
-        $data = array(
-            'name' => $produto->get_name(),
-            'type' => $produto->get_type(),
-            'regular_price' => $produto->get_regular_price(),
-            'sale_price' => $produto->get_sale_price(),
-            'description' => $produto->get_description(),
-            'short_description' => $produto->get_short_description(),
-            'sku' => $produto->get_sku(),
-            'manage_stock' => $produto->get_manage_stock(),
-            'stock_quantity' => $produto->get_stock_quantity(),
-            'in_stock' => $produto->is_in_stock(),
-            'weight' => $produto->get_weight(),
-            'dimensions' => array(
-                'length' => $produto->get_length(),
-                'width' => $produto->get_width(),
-                'height' => $produto->get_height()
-            ),
-            'categories' => $this->get_product_categories($produto),
-            'images' => $this->get_product_images($produto),
-            'attributes' => $this->get_product_attributes($produto),
-            'meta_data' => array(
+            // Adicionar metadados específicos para rastreamento
+            $product_data['meta_data'] = array(
                 array(
                     'key' => '_sincronizado_fabrica',
                     'value' => 'sim'
@@ -155,24 +99,107 @@ class Sincronizador_WC_API_Handler {
                 array(
                     'key' => '_produto_id_fabrica',
                     'value' => $produto->get_id()
+                ),
+                array(
+                    'key' => '_data_sincronizacao',
+                    'value' => current_time('mysql')
                 )
-            )
-        );
-        
-        // Se for produto variável, incluir variações
-        if ($produto->is_type('variable')) {
-            $data['variations'] = $this->get_product_variations($produto);
+            );
+            
+            // Verificar se produto já existe no destino
+            $existing_product_id = $this->api_operations->buscar_produto_no_destino($lojista, $produto->get_sku());
+            
+            $response_data = null;
+            $action = '';
+            
+            if ($existing_product_id) {
+                // Atualizar produto existente
+                $options = array(
+                    'incluir_imagens' => true,
+                    'incluir_variacoes' => true,
+                    'atualizar_precos' => true,
+                    'atualizar_estoque' => true
+                );
+                
+                $success = $this->api_operations->atualizar_produto_no_destino($lojista, $existing_product_id, $product_data, $options);
+                
+                if ($success) {
+                    $response_data = array('id' => $existing_product_id);
+                    $action = 'updated';
+                } else {
+                    throw new Exception(__('Erro ao atualizar produto no destino', 'sincronizador-wc'));
+                }
+                
+            } else {
+                // Criar novo produto
+                $options = array(
+                    'incluir_imagens' => true,
+                    'incluir_variacoes' => true,
+                    'incluir_categorias' => false, // Não criar categorias automaticamente
+                    'status' => 'publish'
+                );
+                
+                $new_product_id = $this->api_operations->criar_produto_no_destino($lojista, $product_data, $options);
+                
+                if ($new_product_id) {
+                    $response_data = array('id' => $new_product_id);
+                    $action = 'created';
+                } else {
+                    throw new Exception(__('Erro ao criar produto no destino', 'sincronizador-wc'));
+                }
+            }
+            
+            // Registrar na tabela de sincronização
+            $this->update_sync_record($lojista_id, $produto_id, $response_data['id'], $produto->get_sku(), 'sincronizado');
+            
+            // Log da operação
+            $message = sprintf("Produto %s: %s (SKU: %s)", $action === 'created' ? 'criado' : 'atualizado', $produto->get_name(), $produto->get_sku());
+            $this->log_operation($lojista_id, 'importacao', $message);
+            
+            error_log("SINCRONIZADOR WC API HANDLER: " . $message);
+            
+            return array(
+                'success' => true,
+                'message' => sprintf(__('Produto %s com sucesso', 'sincronizador-wc'), $action === 'created' ? 'criado' : 'atualizado'),
+                'product_id' => $response_data['id'],
+                'action' => $action
+            );
+            
+        } catch (Exception $e) {
+            // Registrar erro na sincronização
+            $this->update_sync_record($lojista_id, $produto_id, null, $produto->get_sku() ?: 'N/A', 'erro', $e->getMessage());
+            
+            // Log do erro
+            $error_message = "Erro ao enviar produto ID {$produto_id}: {$e->getMessage()}";
+            $this->log_operation($lojista_id, 'erro', $error_message);
+            
+            error_log("SINCRONIZADOR WC API HANDLER ERRO: " . $error_message);
+            
+            return array('success' => false, 'message' => $e->getMessage());
         }
-        
-        return $data;
     }
     
     /**
-     * Obtém categorias do produto
+     * Prepara dados do produto para envio - REMOVIDO
+     * Agora usa a classe utilitária Sincronizador_WC_Product_Utils::format_product_data()
+     */
+    private function prepare_product_data($produto) {
+        // Método mantido para compatibilidade, mas delega para a classe utilitária
+        return $this->product_utils->format_product_data($produto);
+    }
+    
+    /**
+     * Obtém categorias do produto - REFATORADO
+     * Agora usa a classe utilitária
      */
     private function get_product_categories($produto) {
+        // Método privado na classe utilitária, vamos reimplementar de forma simples
         $categories = array();
         $terms = wp_get_post_terms($produto->get_id(), 'product_cat');
+        
+        if (is_wp_error($terms)) {
+            return $categories;
+        }
         
         foreach ($terms as $term) {
             $categories[] = array(
@@ -183,97 +210,90 @@ class Sincronizador_WC_API_Handler {
         
         return $categories;
     }
-    
+
     /**
-     * Obtém imagens do produto
+     * Obtém imagens do produto - REMOVIDO
+     * Agora usa a classe utilitária
      */
     private function get_product_images($produto) {
-        $images = array();
-        
-        // Imagem principal
-        $image_id = $produto->get_image_id();
-        if ($image_id) {
-            $images[] = array(
-                'src' => wp_get_attachment_url($image_id),
-                'name' => get_the_title($image_id),
-                'alt' => get_post_meta($image_id, '_wp_attachment_image_alt', true)
-            );
-        }
-        
-        // Galeria
-        $gallery_ids = $produto->get_gallery_image_ids();
-        foreach ($gallery_ids as $gallery_id) {
-            $images[] = array(
-                'src' => wp_get_attachment_url($gallery_id),
-                'name' => get_the_title($gallery_id),
-                'alt' => get_post_meta($gallery_id, '_wp_attachment_image_alt', true)
-            );
-        }
-        
-        return $images;
+        return $this->product_utils->get_product_images($produto, 'detailed');
     }
-    
+
     /**
-     * Obtém atributos do produto
+     * Obtém atributos do produto - REMOVIDO
+     * Agora usa a classe utilitária
      */
     private function get_product_attributes($produto) {
-        $attributes = array();
-        $product_attributes = $produto->get_attributes();
-        
-        foreach ($product_attributes as $attribute) {
-            $attributes[] = array(
-                'name' => $attribute->get_name(),
-                'options' => $attribute->get_options(),
-                'visible' => $attribute->get_visible(),
-                'variation' => $attribute->get_variation()
-            );
-        }
-        
-        return $attributes;
+        return $this->product_utils->get_product_attributes($produto);
     }
-    
+
     /**
-     * Obtém variações do produto
+     * Obtém variações do produto - REMOVIDO
+     * Agora usa a classe utilitária
      */
     private function get_product_variations($produto) {
-        $variations = array();
-        $variation_ids = $produto->get_children();
+        return $this->product_utils->get_product_variations($produto);
+    }    /**
+     * Busca dados do lojista - NOVO MÉTODO
+     * Compatibilidade com diferentes formatos de armazenamento
+     */
+    private function get_lojista_data($lojista_id) {
+        // Primeiro tentar buscar da opção (formato atual)
+        $lojistas = get_option('sincronizador_wc_lojistas', array());
         
-        foreach ($variation_ids as $variation_id) {
-            $variation = wc_get_product($variation_id);
+        foreach ($lojistas as $lojista) {
+            if ($lojista['id'] == $lojista_id) {
+                return $lojista;
+            }
+        }
+        
+        // Se não encontrar, tentar buscar do banco de dados (formato antigo)
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'sincronizador_lojistas';
+        
+        // Verificar se a tabela existe
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            $lojista = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM {$table_name} WHERE id = %d",
+                $lojista_id
+            ), ARRAY_A);
             
-            if ($variation) {
-                $variations[] = array(
-                    'regular_price' => $variation->get_regular_price(),
-                    'sale_price' => $variation->get_sale_price(),
-                    'sku' => $variation->get_sku(),
-                    'manage_stock' => $variation->get_manage_stock(),
-                    'stock_quantity' => $variation->get_stock_quantity(),
-                    'in_stock' => $variation->is_in_stock(),
-                    'weight' => $variation->get_weight(),
-                    'dimensions' => array(
-                        'length' => $variation->get_length(),
-                        'width' => $variation->get_width(),
-                        'height' => $variation->get_height()
-                    ),
-                    'attributes' => $variation->get_variation_attributes(),
-                    'image' => array(
-                        'src' => wp_get_attachment_url($variation->get_image_id())
-                    )
+            if ($lojista) {
+                // Converter para formato esperado
+                return array(
+                    'id' => $lojista['id'],
+                    'nome' => $lojista['nome_loja'] ?? $lojista['nome'] ?? '',
+                    'url' => $lojista['url_loja'] ?? $lojista['url'] ?? '',
+                    'consumer_key' => $lojista['consumer_key'] ?? '',
+                    'consumer_secret' => $lojista['consumer_secret'] ?? ''
                 );
             }
         }
         
-        return $variations;
+        return null;
     }
-    
+
     /**
-     * Obtém dados de vendas do lojista
+     * Obtém dados de vendas do lojista - MELHORADO
      */
     public function get_sales_data($lojista_id, $date_from = null, $date_to = null) {
         try {
-            $client = $this->get_api_client($lojista_id);
+            // Buscar dados do lojista usando o novo método
+            $lojista = $this->get_lojista_data($lojista_id);
             
+            if (!$lojista) {
+                throw new Exception(__('Lojista não encontrado', 'sincronizador-wc'));
+            }
+            
+            // Testar conexão primeiro
+            $connection_test = $this->api_operations->testar_conexao_lojista($lojista);
+            
+            if (!$connection_test['success']) {
+                throw new Exception('Erro de conexão: ' . $connection_test['message']);
+            }
+            
+            // Usar a API nativa do WordPress para fazer a requisição
+            $url = trailingslashit($lojista['url']) . 'wp-json/wc/v3/orders';
             $params = array(
                 'status' => 'completed',
                 'per_page' => 100
@@ -287,29 +307,69 @@ class Sincronizador_WC_API_Handler {
                 $params['before'] = $date_to;
             }
             
-            $orders = $client->get('orders', $params);
+            $url_with_params = add_query_arg($params, $url);
+            
+            $response = wp_remote_get($url_with_params, array(
+                'timeout' => 30,
+                'headers' => array(
+                    'Authorization' => 'Basic ' . base64_encode($lojista['consumer_key'] . ':' . $lojista['consumer_secret']),
+                    'Content-Type' => 'application/json',
+                    'User-Agent' => 'Sincronizador-WC/' . (defined('SINCRONIZADOR_WC_VERSION') ? SINCRONIZADOR_WC_VERSION : '1.0')
+                )
+            ));
+            
+            if (is_wp_error($response)) {
+                throw new Exception('Erro na requisição: ' . $response->get_error_message());
+            }
+            
+            $response_code = wp_remote_retrieve_response_code($response);
+            if ($response_code !== 200) {
+                throw new Exception("Erro HTTP {$response_code} ao buscar dados de vendas");
+            }
+            
+            $body = wp_remote_retrieve_body($response);
+            $orders = json_decode($body, true);
+            
+            if (!$orders || !is_array($orders)) {
+                throw new Exception('Resposta inválida da API de vendas');
+            }
             
             return $this->process_sales_data($orders, $lojista_id);
             
         } catch (Exception $e) {
-            $this->log_operation($lojista_id, 'erro', "Erro ao obter dados de vendas: {$e->getMessage()}");
+            $error_message = "Erro ao obter dados de vendas: {$e->getMessage()}";
+            $this->log_operation($lojista_id, 'erro', $error_message);
+            
+            error_log("SINCRONIZADOR WC API HANDLER: " . $error_message);
+            
             return array('success' => false, 'message' => $e->getMessage());
         }
     }
     
     /**
-     * Processa dados de vendas
+     * Processa dados de vendas - MELHORADO
+     * Melhor tratamento de dados e logs
      */
     private function process_sales_data($orders, $lojista_id) {
         global $wpdb;
         
         $sales_data = array();
+        $processed_count = 0;
+        $skipped_count = 0;
         
         foreach ($orders as $order) {
-            foreach ($order->line_items as $item) {
-                $sku = $item->sku;
+            // Verificar se $order é array (já decodificado) ou objeto
+            $order_data = is_array($order) ? $order : (array) $order;
+            $line_items = $order_data['line_items'] ?? array();
+            
+            foreach ($line_items as $item) {
+                $item_data = is_array($item) ? $item : (array) $item;
+                $sku = $item_data['sku'] ?? '';
                 
-                if (empty($sku)) continue;
+                if (empty($sku)) {
+                    $skipped_count++;
+                    continue;
+                }
                 
                 // Buscar produto da fábrica pelo SKU
                 $produto_id_fabrica = $wpdb->get_var($wpdb->prepare(
@@ -317,74 +377,137 @@ class Sincronizador_WC_API_Handler {
                     $sku
                 ));
                 
-                if (!$produto_id_fabrica) continue;
+                if (!$produto_id_fabrica) {
+                    $skipped_count++;
+                    continue;
+                }
                 
-                $periodo = date('Y-m', strtotime($order->date_created));
+                $order_date = $order_data['date_created'] ?? current_time('mysql');
+                $periodo = date('Y-m', strtotime($order_date));
                 
                 $sales_data[] = array(
                     'lojista_id' => $lojista_id,
                     'produto_id_fabrica' => $produto_id_fabrica,
                     'sku' => $sku,
-                    'quantidade_vendida' => $item->quantity,
-                    'valor_total' => $item->total,
-                    'data_venda' => $order->date_created,
+                    'quantidade_vendida' => intval($item_data['quantity'] ?? 0),
+                    'valor_total' => floatval($item_data['total'] ?? 0),
+                    'data_venda' => $order_date,
                     'periodo_referencia' => $periodo
                 );
+                
+                $processed_count++;
             }
         }
         
-        return array('success' => true, 'data' => $sales_data);
+        // Log do processamento
+        $log_message = "Dados de vendas processados: {$processed_count} itens processados, {$skipped_count} ignorados";
+        $this->log_operation($lojista_id, 'vendas', $log_message);
+        error_log("SINCRONIZADOR WC API HANDLER: " . $log_message);
+        
+        return array(
+            'success' => true, 
+            'data' => $sales_data,
+            'processed_count' => $processed_count,
+            'skipped_count' => $skipped_count
+        );
     }
     
     /**
-     * Atualiza registro de sincronização
+     * Atualiza registro de sincronização - MELHORADO
+     * Melhor tratamento de dados e verificação de tabelas
      */
     private function update_sync_record($lojista_id, $produto_id_fabrica, $produto_id_lojista, $sku, $status, $erro = null) {
         global $wpdb;
         
+        $table_name = $wpdb->prefix . 'sincronizador_produtos';
+        
+        // Verificar se a tabela existe
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") !== $table_name) {
+            error_log("SINCRONIZADOR WC API HANDLER: Tabela {$table_name} não existe. Registro de sincronização não foi salvo.");
+            return false;
+        }
+        
         $data = array(
-            'lojista_id' => $lojista_id,
-            'produto_id_fabrica' => $produto_id_fabrica,
-            'produto_id_lojista' => $produto_id_lojista,
-            'sku' => $sku,
-            'status_sincronizacao' => $status,
+            'lojista_id' => intval($lojista_id),
+            'produto_id_fabrica' => intval($produto_id_fabrica),
+            'produto_id_lojista' => $produto_id_lojista ? intval($produto_id_lojista) : null,
+            'sku' => sanitize_text_field($sku),
+            'status_sincronizacao' => sanitize_text_field($status),
             'data_ultima_sincronizacao' => current_time('mysql'),
-            'erro_mensagem' => $erro
+            'erro_mensagem' => $erro ? sanitize_text_field(substr($erro, 0, 500)) : null // Limitar tamanho do erro
         );
         
         // Verificar se já existe registro
         $existing = $wpdb->get_var($wpdb->prepare(
-            "SELECT id FROM {$wpdb->prefix}sincronizador_produtos WHERE lojista_id = %d AND sku = %s",
+            "SELECT id FROM {$table_name} WHERE lojista_id = %d AND sku = %s",
             $lojista_id,
             $sku
         ));
         
         if ($existing) {
-            $wpdb->update(
-                $wpdb->prefix . 'sincronizador_produtos',
+            $result = $wpdb->update(
+                $table_name,
                 $data,
-                array('id' => $existing)
+                array('id' => $existing),
+                array('%d', '%d', '%d', '%s', '%s', '%s', '%s'),
+                array('%d')
             );
+            
+            $operation = 'atualizado';
         } else {
-            $wpdb->insert($wpdb->prefix . 'sincronizador_produtos', $data);
+            $result = $wpdb->insert(
+                $table_name, 
+                $data,
+                array('%d', '%d', '%d', '%s', '%s', '%s', '%s')
+            );
+            
+            $operation = 'criado';
         }
+        
+        if ($result === false) {
+            error_log("SINCRONIZADOR WC API HANDLER: Erro ao salvar registro de sincronização - SKU: {$sku}, Erro: {$wpdb->last_error}");
+        } else {
+            error_log("SINCRONIZADOR WC API HANDLER: Registro de sincronização {$operation} - SKU: {$sku}, Status: {$status}");
+        }
+        
+        return $result !== false;
     }
     
     /**
-     * Registra operação no log
+     * Registra operação no log - MELHORADO  
+     * Melhor tratamento de dados e verificação de tabelas
      */
     private function log_operation($lojista_id, $tipo, $detalhes) {
         global $wpdb;
         
-        $wpdb->insert(
-            $wpdb->prefix . 'sincronizador_logs',
+        $table_name = $wpdb->prefix . 'sincronizador_logs';
+        
+        // Verificar se a tabela existe
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") !== $table_name) {
+            // Se não existe, apenas logar no error_log
+            error_log("SINCRONIZADOR WC API HANDLER LOG [{$tipo}]: {$detalhes}");
+            return false;
+        }
+        
+        $result = $wpdb->insert(
+            $table_name,
             array(
-                'lojista_id' => $lojista_id,
-                'tipo' => $tipo,
-                'acao' => substr($detalhes, 0, 100),
-                'detalhes' => $detalhes,
+                'lojista_id' => intval($lojista_id),
+                'tipo' => sanitize_text_field($tipo),
+                'acao' => sanitize_text_field(substr($detalhes, 0, 100)),
+                'detalhes' => sanitize_text_field(substr($detalhes, 0, 1000)), // Limitar tamanho
                 'data_criacao' => current_time('mysql')
-            )
+            ),
+            array('%d', '%s', '%s', '%s', '%s')
         );
+        
+        if ($result === false) {
+            error_log("SINCRONIZADOR WC API HANDLER: Erro ao salvar log - {$wpdb->last_error}");
+        }
+        
+        // Sempre logar no error_log também
+        error_log("SINCRONIZADOR WC API HANDLER LOG [{$tipo}]: {$detalhes}");
+        
+        return $result !== false;
     }
 }

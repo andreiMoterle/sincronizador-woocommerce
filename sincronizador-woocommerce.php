@@ -49,6 +49,16 @@ class Sincronizador_WooCommerce {
     
     private static $instance = null;
     
+    /**
+     * Utilitário de produtos
+     */
+    private $product_utils;
+    
+    /**
+     * Operações de API
+     */
+    private $api_operations;
+    
     public static function instance() {
         if (is_null(self::$instance)) {
             self::$instance = new self();
@@ -155,6 +165,10 @@ class Sincronizador_WooCommerce {
         
         $this->includes();
         $this->init_hooks();
+        
+        // Inicializar classes utilitárias
+        $this->product_utils = Sincronizador_WC_Product_Utils::get_instance();
+        $this->api_operations = Sincronizador_WC_API_Operations::get_instance();
     }
     
     // Adiciona menu diretamente na classe principal
@@ -603,396 +617,106 @@ class Sincronizador_WooCommerce {
     }
     
     /**
-     * Buscar produtos locais (da fábrica)
+     * Buscar produtos locais (da fábrica) - REFATORADO
+     * Agora usa a classe utilitária centralizada
      */
     private function get_produtos_locais() {
-        // Buscar produtos WooCommerce locais
-        $args = array(
-            'post_type' => 'product',
-            'post_status' => 'publish',
-            'posts_per_page' => -1,
-            'meta_query' => array(
-                array(
-                    'key' => '_stock_status',
-                    'value' => 'instock',
-                    'compare' => '='
-                )
-            )
-        );
-        
-        $produtos = get_posts($args);
-        $produtos_formatados = array();
-        
-        foreach ($produtos as $produto_post) {
-            $produto = wc_get_product($produto_post->ID);
-            
-            if ($produto && $produto->get_sku()) {
-                // Debug dos preços na importação
-                $preco_regular = $produto->get_regular_price();
-                $preco_atual = $produto->get_price();
-                $preco_promocional = $produto->get_sale_price();
-                
-                // Para produtos variáveis, buscar preço das variações
-                if ($produto->is_type('variable')) {
-                    $variation_prices = $produto->get_variation_prices();
-                    if (!empty($variation_prices['price'])) {
-                        $preco_atual = min($variation_prices['price']);
-                        error_log("DEBUG IMPORTAÇÃO - Produto variável ID {$produto_post->ID}: menor preço das variações = {$preco_atual}");
-                    }
-                    if (!empty($variation_prices['regular_price'])) {
-                        $preco_regular = min($variation_prices['regular_price']);
-                    }
-                    if (!empty($variation_prices['sale_price'])) {
-                        $precos_promocionais = array_filter($variation_prices['sale_price'], function($price) {
-                            return $price !== '';
-                        });
-                        if (!empty($precos_promocionais)) {
-                            $preco_promocional = min($precos_promocionais);
-                        }
-                    }
-                }
-                
-                error_log("DEBUG IMPORTAÇÃO - Produto ID {$produto_post->ID}: regular_price={$preco_regular}, price={$preco_atual}, sale_price={$preco_promocional}");
-                
-                // Determinar o melhor preço para exibir
-                $preco_final = '';
-                if (!empty($preco_atual) && $preco_atual !== '0') {
-                    $preco_final = $preco_atual;
-                } elseif (!empty($preco_regular) && $preco_regular !== '0') {
-                    $preco_final = $preco_regular;
-                } else {
-                    // Tentar buscar diretamente do meta
-                    $preco_meta = get_post_meta($produto_post->ID, '_price', true);
-                    $regular_meta = get_post_meta($produto_post->ID, '_regular_price', true);
-                    
-                    if (!empty($preco_meta) && $preco_meta !== '0') {
-                        $preco_final = $preco_meta;
-                    } elseif (!empty($regular_meta) && $regular_meta !== '0') {
-                        $preco_final = $regular_meta;
-                    }
-                }
-                
-                error_log("DEBUG IMPORTAÇÃO - Produto ID {$produto_post->ID}: preço final escolhido = {$preco_final}");
-                
-                $produtos_formatados[] = array(
-                    'id' => $produto->get_id(),
-                    'name' => $produto->get_name(),
-                    'sku' => $produto->get_sku(),
-                    'regular_price' => $preco_regular ?: '0',
-                    'sale_price' => $preco_promocional ?: '',
-                    'stock_quantity' => $produto->get_stock_quantity() ?: 0,
-                    'description' => $produto->get_description(),
-                    'short_description' => $produto->get_short_description(),
-                    'categories' => wp_get_post_terms($produto->get_id(), 'product_cat', array('fields' => 'names')),
-                    'images' => $this->get_product_images($produto)
-                );
-            }
+        // Usar a classe utilitária para obter produtos
+        if (!$this->product_utils) {
+            $this->product_utils = Sincronizador_WC_Product_Utils::get_instance();
         }
         
-        // Se não há produtos reais, criar produtos de demonstração
-        if (empty($produtos_formatados)) {
-            $produtos_formatados = $this->get_produtos_demonstracao();
-        }
-        
-        return $produtos_formatados;
+        return $this->product_utils->get_produtos_locais();
     }
     
     /**
-     * Produtos de demonstração para teste
+     * Produtos de demonstração para teste - REFATORADO
+     * Agora usa a classe utilitária centralizada
      */
     private function get_produtos_demonstracao() {
-        return array(
-            array(
-                'id' => 999001,
-                'name' => 'Produto Demo 1 - Camiseta Básica',
-                'sku' => 'CAM-001',
-                'regular_price' => '29.90',
-                'sale_price' => '24.90',
-                'stock_quantity' => 100,
-                'description' => 'Camiseta básica 100% algodão, confortável e durável.',
-                'short_description' => 'Camiseta básica de alta qualidade',
-                'categories' => array('Roupas', 'Camisetas'),
-                'images' => array('https://via.placeholder.com/80x80/4CAF50/FFFFFF?text=CAM001')
-            ),
-            array(
-                'id' => 999002,
-                'name' => 'Produto Demo 2 - Calça Jeans',
-                'sku' => 'CAL-002',
-                'regular_price' => '89.90',
-                'sale_price' => '79.90',
-                'stock_quantity' => 50,
-                'description' => 'Calça jeans masculina, corte reto, tecido resistente.',
-                'short_description' => 'Calça jeans de qualidade premium',
-                'categories' => array('Roupas', 'Calças'),
-                'images' => array('https://via.placeholder.com/80x80/2196F3/FFFFFF?text=CAL002')
-            ),
-            array(
-                'id' => 999003,
-                'name' => 'Produto Demo 3 - Tênis Esportivo',
-                'sku' => 'TEN-003',
-                'regular_price' => '159.90',
-                'sale_price' => '',
-                'stock_quantity' => 25,
-                'description' => 'Tênis esportivo para corrida e caminhada, solado antiderrapante.',
-                'short_description' => 'Tênis esportivo confortável',
-                'categories' => array('Calçados', 'Esportivo'),
-                'images' => array('https://via.placeholder.com/80x80/FF9800/FFFFFF?text=TEN003')
-            ),
-            array(
-                'id' => 999004,
-                'name' => 'Produto Demo 4 - Mochila Escolar',
-                'sku' => 'MOC-004',
-                'regular_price' => '79.90',
-                'sale_price' => '69.90',
-                'stock_quantity' => 30,
-                'description' => 'Mochila escolar com múltiplos compartimentos, resistente à água.',
-                'short_description' => 'Mochila escolar resistente',
-                'categories' => array('Acessórios', 'Mochilas'),
-                'images' => array('https://via.placeholder.com/80x80/9C27B0/FFFFFF?text=MOC004')
-            ),
-            array(
-                'id' => 999005,
-                'name' => 'Produto Demo 5 - Relógio Digital',
-                'sku' => 'REL-005',
-                'regular_price' => '199.90',
-                'sale_price' => '179.90',
-                'stock_quantity' => 15,
-                'description' => 'Relógio digital à prova d\'água com múltiplas funções.',
-                'short_description' => 'Relógio digital multifuncional',
-                'categories' => array('Acessórios', 'Relógios'),
-                'images' => array('https://via.placeholder.com/80x80/607D8B/FFFFFF?text=REL005')
-            ),
-            array(
-                'id' => 999006,
-                'name' => 'Produto Demo 6 - Smartphone',
-                'sku' => 'SMART-006',
-                'regular_price' => '899.90',
-                'sale_price' => '799.90',
-                'stock_quantity' => 10,
-                'description' => 'Smartphone com tela de 6.5 polegadas, 128GB de armazenamento.',
-                'short_description' => 'Smartphone avançado',
-                'categories' => array('Eletrônicos', 'Celulares'),
-                'images' => array('https://via.placeholder.com/80x80/FF5722/FFFFFF?text=SMART006')
-            ),
-            array(
-                'id' => 999007,
-                'name' => 'Produto Demo 7 - Fone Bluetooth',
-                'sku' => 'FONE-007',
-                'regular_price' => '149.90',
-                'sale_price' => '',
-                'stock_quantity' => 40,
-                'description' => 'Fone de ouvido Bluetooth com cancelamento de ruído.',
-                'short_description' => 'Fone Bluetooth premium',
-                'categories' => array('Eletrônicos', 'Áudio'),
-                'images' => array('https://via.placeholder.com/80x80/795548/FFFFFF?text=FONE007')
-            ),
-            array(
-                'id' => 999008,
-                'name' => 'Produto Demo 8 - Notebook Gamer',
-                'sku' => 'NOTE-008',
-                'regular_price' => '2999.90',
-                'sale_price' => '2699.90',
-                'stock_quantity' => 5,
-                'description' => 'Notebook para jogos com placa de vídeo dedicada.',
-                'short_description' => 'Notebook de alta performance',
-                'categories' => array('Eletrônicos', 'Computadores'),
-                'images' => array('https://via.placeholder.com/80x80/3F51B5/FFFFFF?text=NOTE008')
-            )
-        );
+        if (!$this->product_utils) {
+            $this->product_utils = Sincronizador_WC_Product_Utils::get_instance();
+        }
+        
+        return $this->product_utils->get_produtos_demonstracao();
     }
     
     /**
-     * Buscar produto no destino pelo SKU
+     * Buscar produto no destino pelo SKU - REFATORADO
+     * Agora usa a classe de operações de API
      */
     private function buscar_produto_no_destino($lojista, $sku) {
-        $url = trailingslashit($lojista['url']) . 'wp-json/wc/v3/products?sku=' . urlencode($sku);
-        
-        $response = wp_remote_get($url, array(
-            'timeout' => 30,
-            'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($lojista['consumer_key'] . ':' . $lojista['consumer_secret']),
-                'Content-Type' => 'application/json'
-            )
-        ));
-        
-        if (is_wp_error($response)) {
-            error_log('ERRO ao buscar produto: ' . $response->get_error_message());
-            return false;
+        if (!$this->api_operations) {
+            $this->api_operations = Sincronizador_WC_API_Operations::get_instance();
         }
         
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        
-        if (!empty($body) && isset($body[0]['id'])) {
-            return $body[0]['id'];
-        }
-        
-        return false;
+        return $this->api_operations->buscar_produto_no_destino($lojista, $sku);
     }
     
     /**
-     * Criar produto no destino
+     * Criar produto no destino - REFATORADO
+     * Agora usa a classe de operações de API
      */
     private function criar_produto_no_destino($lojista, $produto_fabrica) {
-        $url = trailingslashit($lojista['url']) . 'wp-json/wc/v3/products';
+        if (!$this->api_operations) {
+            $this->api_operations = Sincronizador_WC_API_Operations::get_instance();
+        }
         
-        $dados_produto = array(
-            'name' => $produto_fabrica['name'],
-            'sku' => $produto_fabrica['sku'],
-            'regular_price' => $produto_fabrica['regular_price'],
-            'sale_price' => $produto_fabrica['sale_price'],
-            'stock_quantity' => $produto_fabrica['stock_quantity'],
-            'manage_stock' => true,
-            'description' => $produto_fabrica['description'],
-            'short_description' => $produto_fabrica['short_description'],
-            'status' => 'publish',
-            'catalog_visibility' => 'visible'
+        // Opções padrão para criação
+        $options = array(
+            'incluir_imagens' => true,
+            'incluir_variacoes' => true,
+            'incluir_categorias' => false,
+            'status' => 'publish'
         );
         
-        $response = wp_remote_post($url, array(
-            'timeout' => 30,
-            'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($lojista['consumer_key'] . ':' . $lojista['consumer_secret']),
-                'Content-Type' => 'application/json'
-            ),
-            'body' => json_encode($dados_produto)
-        ));
-        
-        if (is_wp_error($response)) {
-            error_log('ERRO ao criar produto: ' . $response->get_error_message());
-            return false;
-        }
-        
-        $response_code = wp_remote_retrieve_response_code($response);
-        if ($response_code === 201) {
-            $body = json_decode(wp_remote_retrieve_body($response), true);
-            if (!empty($body) && isset($body['id'])) {
-                return $body['id']; // Retorna o ID do produto criado
-            }
-        }
-        
-        return false;
+        return $this->api_operations->criar_produto_no_destino($lojista, $produto_fabrica, $options);
     }
     
     /**
-     * Atualizar produto no destino
+     * Atualizar produto no destino - REFATORADO
+     * Agora usa a classe de operações de API
      */
     private function atualizar_produto_no_destino($lojista, $produto_id, $produto_fabrica) {
-        $url = trailingslashit($lojista['url']) . 'wp-json/wc/v3/products/' . $produto_id;
+        if (!$this->api_operations) {
+            $this->api_operations = Sincronizador_WC_API_Operations::get_instance();
+        }
         
-        $dados_produto = array(
-            'name' => $produto_fabrica['name'],
-            'regular_price' => $produto_fabrica['regular_price'],
-            'sale_price' => $produto_fabrica['sale_price'],
-            'stock_quantity' => $produto_fabrica['stock_quantity'],
-            'description' => $produto_fabrica['description'],
-            'short_description' => $produto_fabrica['short_description']
+        // Opções padrão para atualização
+        $options = array(
+            'incluir_imagens' => true,
+            'incluir_variacoes' => true,
+            'atualizar_precos' => true,
+            'atualizar_estoque' => true
         );
         
-        $response = wp_remote_request($url, array(
-            'method' => 'PUT',
-            'timeout' => 30,
-            'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($lojista['consumer_key'] . ':' . $lojista['consumer_secret']),
-                'Content-Type' => 'application/json'
-            ),
-            'body' => json_encode($dados_produto)
-        ));
+        $result = $this->api_operations->atualizar_produto_no_destino($lojista, $produto_id, $produto_fabrica, $options);
         
-        if (is_wp_error($response)) {
-            error_log('ERRO ao atualizar produto: ' . $response->get_error_message());
-            return false;
-        }
-        
-        $response_code = wp_remote_retrieve_response_code($response);
-        if ($response_code === 200) {
-            return $produto_id; // Retorna o ID do produto atualizado
-        }
-        
-        return false;
+        return $result ? $produto_id : false;
     }
     
     /**
-     * Obter imagens do produto
+     * Obter imagens do produto - REFATORADO
+     * Agora usa a classe utilitária centralizada
      */
     private function get_product_images($produto) {
-        $images = array();
-        
-        // Imagem principal
-        $image_id = $produto->get_image_id();
-        if ($image_id) {
-            $image_url = wp_get_attachment_image_url($image_id, 'full');
-            if ($this->is_valid_image_url($image_url)) {
-                $images[] = $image_url;
-            }
+        if (!$this->product_utils) {
+            $this->product_utils = Sincronizador_WC_Product_Utils::get_instance();
         }
         
-        // Galeria de imagens
-        $gallery_ids = $produto->get_gallery_image_ids();
-        foreach ($gallery_ids as $gallery_id) {
-            $image_url = wp_get_attachment_image_url($gallery_id, 'full');
-            if ($this->is_valid_image_url($image_url)) {
-                $images[] = $image_url;
-            }
-        }
-        
-        return $images;
+        return $this->product_utils->get_product_images($produto);
     }
     
     /**
-     * Validar URL de imagem antes de enviar
+     * Validar URL de imagem - REFATORADO
+     * Agora usa a classe utilitária centralizada
      */
     private function is_valid_image_url($url) {
-        if (empty($url)) {
-            return false;
+        if (!$this->product_utils) {
+            $this->product_utils = Sincronizador_WC_Product_Utils::get_instance();
         }
         
-        // Em desenvolvimento, permitir todas as URLs para teste
-        // Detectar ambiente de desenvolvimento por URL
-        if (strpos($url, '.test') !== false || strpos($url, 'localhost') !== false || strpos($url, '127.0.0.1') !== false) {
-            error_log("IMAGEM DEBUG: Permitindo URL de desenvolvimento - $url");
-            return true;
-        }
-        
-        // Verificar se a URL não é de desenvolvimento local (.test, localhost, etc)
-        $parsed_url = parse_url($url);
-        if (isset($parsed_url['host'])) {
-            $host = $parsed_url['host'];
-            
-            // Bloquear domínios de desenvolvimento apenas em produção
-            $dev_domains = array('.test', '.local', 'localhost', '127.0.0.1', '192.168.');
-            foreach ($dev_domains as $dev_domain) {
-                if (strpos($host, $dev_domain) !== false) {
-                    error_log("IMAGEM BLOQUEADA: URL de desenvolvimento detectada - $url");
-                    return false;
-                }
-            }
-        }
-        
-        // Verificar se a URL é acessível
-        $response = wp_remote_head($url, array(
-            'timeout' => 5,
-            'redirection' => 3
-        ));
-        
-        if (is_wp_error($response)) {
-            error_log("IMAGEM INACESSÍVEL: Erro ao verificar URL - $url - " . $response->get_error_message());
-            return false;
-        }
-        
-        $response_code = wp_remote_retrieve_response_code($response);
-        if ($response_code !== 200) {
-            error_log("IMAGEM INACESSÍVEL: HTTP $response_code para URL - $url");
-            return false;
-        }
-        
-        // Verificar content-type se disponível
-        $content_type = wp_remote_retrieve_header($response, 'content-type');
-        if ($content_type && !str_starts_with($content_type, 'image/')) {
-            error_log("IMAGEM INVÁLIDA: Content-type não é imagem - $url - $content_type");
-            return false;
-        }
-        
-        return true;
+        return $this->product_utils->is_valid_image_url($url);
     }
     
     /**
@@ -1347,50 +1071,15 @@ class Sincronizador_WooCommerce {
      * Testar conexão automaticamente após salvar lojista
      */
     /**
-     * Testar conexão diretamente com os dados do lojista (antes de salvar)
+     * Testar conexão diretamente com os dados do lojista - REFATORADO
+     * Agora usa a classe de operações de API
      */
     private function testar_conexao_lojista_direto($lojista_data) {
-        // Verificar se tem dados necessários
-        if (empty($lojista_data['url']) || empty($lojista_data['consumer_key']) || empty($lojista_data['consumer_secret'])) {
-            return array(
-                'success' => false,
-                'message' => 'Dados incompletos: URL, Consumer Key e Consumer Secret são obrigatórios'
-            );
+        if (!$this->api_operations) {
+            $this->api_operations = Sincronizador_WC_API_Operations::get_instance();
         }
         
-        // Testar conexão real
-        $url = trailingslashit($lojista_data['url']) . 'wp-json/wc/v3/system_status';
-        
-        $response = wp_remote_get($url, array(
-            'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($lojista_data['consumer_key'] . ':' . $lojista_data['consumer_secret'])
-            ),
-            'timeout' => 10
-        ));
-        
-        if (is_wp_error($response)) {
-            return array(
-                'success' => false,
-                'message' => 'Erro de conexão: ' . $response->get_error_message()
-            );
-        }
-        
-        $code = wp_remote_retrieve_response_code($response);
-        
-        if ($code === 200) {
-            return array(
-                'success' => true,
-                'message' => 'Conexão testada com sucesso! Loja: ' . $lojista_data['nome']
-            );
-        } else {
-            $body = wp_remote_retrieve_body($response);
-            $error_data = json_decode($body, true);
-            
-            return array(
-                'success' => false,
-                'message' => 'Erro HTTP ' . $code . ': ' . ($error_data['message'] ?? 'Falha na autenticação. Verifique Consumer Key e Consumer Secret.')
-            );
-        }
+        return $this->api_operations->testar_conexao_lojista($lojista_data);
     }
 
     private function testar_conexao_automatica($lojista_id) {
@@ -1477,6 +1166,10 @@ class Sincronizador_WooCommerce {
     }
     
     private function includes() {
+        // Carregar classes utilitárias primeiro
+        require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-product-utils.php';
+        require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-api-operations.php';
+        
         // Classes principais
         if (file_exists(SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php')) {
             require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php';

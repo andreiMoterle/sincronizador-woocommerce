@@ -9,7 +9,15 @@ if (!defined('ABSPATH')) {
 
 class Sincronizador_WC_Admin_Ajax {
     
+    /**
+     * Validador de permissões centralizado
+     */
+    private $permission_validator;
+    
     public function __construct() {
+        // Inicializar validador de permissões
+        $this->permission_validator = Sincronizador_WC_Permission_Validator::get_instance();
+        
         // AJAX para usuários logados
         add_action('wp_ajax_sincronizador_wc_get_product_details', array($this, 'get_product_details'));
         add_action('wp_ajax_sincronizador_wc_import_product', array($this, 'import_product'));
@@ -19,20 +27,13 @@ class Sincronizador_WC_Admin_Ajax {
     }
     
     /**
-     * Obtém detalhes completos de um produto
+     * Obtém detalhes completos de um produto - REFATORADO
      */
     public function get_product_details() {
-        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        // Usar validador centralizado
+        $this->permission_validator->verify_ajax_request();
         
-        if (!current_user_can('manage_sincronizador_wc')) {
-            wp_die(__('Você não tem permissão para realizar esta ação.', 'sincronizador-wc'));
-        }
-        
-        $product_id = intval($_POST['product_id']);
-        
-        if (!$product_id) {
-            wp_send_json_error(array('message' => __('ID do produto inválido', 'sincronizador-wc')));
-        }
+        $product_id = $this->permission_validator->validate_id($_POST['product_id'] ?? 0, __('ID do produto inválido', 'sincronizador-wc'));
         
         $product_importer = new Sincronizador_WC_Product_Importer();
         $product = $product_importer->get_product_details($product_id);
@@ -50,21 +51,14 @@ class Sincronizador_WC_Admin_Ajax {
     }
     
     /**
-     * Importa produto para lojistas selecionados
+     * Importa produto para lojistas selecionados - REFATORADO
      */
     public function import_product() {
-        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        // Usar validador centralizado
+        $this->permission_validator->verify_ajax_request();
         
-        if (!current_user_can('manage_sincronizador_wc')) {
-            wp_die(__('Você não tem permissão para realizar esta ação.', 'sincronizador-wc'));
-        }
-        
-        $product_id = intval($_POST['product_id']);
-        $lojistas = array_map('intval', $_POST['lojistas']);
-        
-        if (!$product_id || empty($lojistas)) {
-            wp_send_json_error(array('message' => __('Dados inválidos', 'sincronizador-wc')));
-        }
+        $product_id = $this->permission_validator->validate_id($_POST['product_id'] ?? 0, __('ID do produto inválido', 'sincronizador-wc'));
+        $lojistas = $this->permission_validator->validate_ids_array($_POST['lojistas'] ?? array(), __('Nenhum lojista selecionado', 'sincronizador-wc'));
         
         $product_importer = new Sincronizador_WC_Product_Importer();
         $results = $product_importer->import_product_to_lojistas($product_id, $lojistas);
@@ -99,16 +93,13 @@ class Sincronizador_WC_Admin_Ajax {
     }
     
     /**
-     * Força sincronização manual
+     * Força sincronização manual - REFATORADO
      */
     public function force_sync() {
-        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        // Usar validador centralizado
+        $this->permission_validator->verify_ajax_request();
         
-        if (!current_user_can('manage_sincronizador_wc')) {
-            wp_die(__('Você não tem permissão para realizar esta ação.', 'sincronizador-wc'));
-        }
-        
-        $lojista_id = isset($_POST['lojista_id']) ? intval($_POST['lojista_id']) : null;
+        $lojista_id = isset($_POST['lojista_id']) ? $this->permission_validator->validate_id($_POST['lojista_id']) : null;
         
         $sync_manager = new Sincronizador_WC_Sync_Manager();
         $result = $sync_manager->force_sync($lojista_id);
@@ -121,20 +112,13 @@ class Sincronizador_WC_Admin_Ajax {
     }
     
     /**
-     * Testa conexão com lojista
+     * Testa conexão com lojista - REFATORADO
      */
     public function test_connection() {
-        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        // Usar validador centralizado
+        $this->permission_validator->verify_ajax_request();
         
-        if (!current_user_can('manage_sincronizador_wc')) {
-            wp_die(__('Você não tem permissão para realizar esta ação.', 'sincronizador-wc'));
-        }
-        
-        $lojista_id = intval($_POST['lojista_id']);
-        
-        if (!$lojista_id) {
-            wp_send_json_error(array('message' => __('ID do lojista inválido', 'sincronizador-wc')));
-        }
+        $lojista_id = $this->permission_validator->validate_id($_POST['lojista_id'] ?? 0, __('ID do lojista inválido', 'sincronizador-wc'));
         
         $lojista_manager = new Sincronizador_WC_Lojista_Manager();
         $result = $lojista_manager->test_connection($lojista_id);
@@ -147,20 +131,13 @@ class Sincronizador_WC_Admin_Ajax {
     }
     
     /**
-     * Exclui lojista
+     * Exclui lojista - REFATORADO
      */
     public function delete_lojista() {
-        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        // Usar validador centralizado
+        $this->permission_validator->verify_ajax_request();
         
-        if (!current_user_can('manage_sincronizador_wc')) {
-            wp_die(__('Você não tem permissão para realizar esta ação.', 'sincronizador-wc'));
-        }
-        
-        $lojista_id = intval($_POST['lojista_id']);
-        
-        if (!$lojista_id) {
-            wp_send_json_error(array('message' => __('ID do lojista inválido', 'sincronizador-wc')));
-        }
+        $lojista_id = $this->permission_validator->validate_id($_POST['lojista_id'] ?? 0, __('ID do lojista inválido', 'sincronizador-wc'));
         
         $lojista_manager = new Sincronizador_WC_Lojista_Manager();
         $result = $lojista_manager->delete_lojista($lojista_id);

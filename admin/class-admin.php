@@ -9,106 +9,46 @@ if (!defined('ABSPATH')) {
 
 class Sincronizador_WC_Admin {
     
+    /**
+     * Instância da classe de validação de permissões
+     */
+    private $permission_validator;
+    
     public function __construct() {
-        add_action('admin_menu', array($this, 'add_admin_menu'));
+        // REMOVIDO: add_action('admin_menu', array($this, 'add_admin_menu'));
+        // Menus agora são gerenciados pela classe Sincronizador_WC_Admin_Menu
+        
         add_action('admin_init', array($this, 'admin_init'));
-        add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
+        
+        // REMOVIDO: add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
+        // Assets agora são gerenciados pela classe Sincronizador_WC_Assets
+        
+        // Inicializar validador de permissões
+        $this->permission_validator = new Sincronizador_WC_Permission_Validator();
     }
     
-    public function add_admin_menu() {
-        add_menu_page(
-            __('Sincronizador WC', 'sincronizador-wc'),
-            __('Sincronizador WC', 'sincronizador-wc'),
-            'manage_sincronizador_wc',
-            'sincronizador-wc',
-            array($this, 'dashboard_page'),
-            'dashicons-update',
-            56
-        );
-        
-        add_submenu_page(
-            'sincronizador-wc',
-            __('Dashboard', 'sincronizador-wc'),
-            __('Dashboard', 'sincronizador-wc'),
-            'manage_sincronizador_wc',
-            'sincronizador-wc',
-            array($this, 'dashboard_page')
-        );
-        
-        add_submenu_page(
-            'sincronizador-wc',
-            __('Lojistas', 'sincronizador-wc'),
-            __('Lojistas', 'sincronizador-wc'),
-            'manage_sincronizador_wc',
-            'sincronizador-wc-lojistas',
-            array($this, 'lojistas_page')
-        );
-        
-        add_submenu_page(
-            'sincronizador-wc',
-            __('Importar Produtos', 'sincronizador-wc'),
-            __('Importar Produtos', 'sincronizador-wc'),
-            'manage_sincronizador_wc',
-            'sincronizador-wc-importar',
-            array($this, 'importar_page')
-        );
-        
-        add_submenu_page(
-            'sincronizador-wc',
-            __('Relatórios', 'sincronizador-wc'),
-            __('Relatórios', 'sincronizador-wc'),
-            'view_sincronizador_wc_reports',
-            'sincronizador-wc-relatorios',
-            array($this, 'relatorios_page')
-        );
-        
-        add_submenu_page(
-            'sincronizador-wc',
-            __('Logs', 'sincronizador-wc'),
-            __('Logs', 'sincronizador-wc'),
-            'manage_sincronizador_wc',
-            'sincronizador-wc-logs',
-            array($this, 'logs_page')
-        );
-    }
+    /**
+     * REMOVIDO - DUPLICAÇÃO ELIMINADA
+     * 
+     * Os menus agora são gerenciados exclusivamente pela classe Sincronizador_WC_Admin_Menu
+     * para evitar duplicação de código e conflitos.
+     * 
+     * @see admin/class-admin-menu.php
+     */
     
     public function admin_init() {
         // Registrar configurações
         register_setting('sincronizador_wc_settings', 'sincronizador_wc_options');
     }
     
-    public function enqueue_scripts($hook) {
-        if (strpos($hook, 'sincronizador-wc') === false) {
-            return;
-        }
-        
-        wp_enqueue_script(
-            'sincronizador-wc-admin',
-            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/admin.js',
-            array('jquery'),
-            SINCRONIZADOR_WC_VERSION,
-            true
-        );
-        
-        wp_enqueue_style(
-            'sincronizador-wc-admin',
-            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/css/admin.css',
-            array(),
-            SINCRONIZADOR_WC_VERSION
-        );
-        
-        // Localizar script
-        wp_localize_script('sincronizador-wc-admin', 'sincronizador_wc_ajax', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('sincronizador_wc_nonce'),
-            'strings' => array(
-                'confirm_delete' => __('Tem certeza que deseja excluir?', 'sincronizador-wc'),
-                'processing' => __('Processando...', 'sincronizador-wc'),
-                'error' => __('Erro na operação', 'sincronizador-wc'),
-                'success' => __('Operação realizada com sucesso', 'sincronizador-wc')
-            )
-        ));
-    }
+    /**
+     * REMOVIDO - DUPLICAÇÃO ELIMINADA
+     * 
+     * O enqueue de scripts agora é gerenciado exclusivamente pela classe Sincronizador_WC_Assets
+     * para evitar duplicação de código e conflitos.
+     * 
+     * @see admin/class-assets.php
+     */
     
     public function dashboard_page() {
         $stats = Sincronizador_WC_Database::get_stats();

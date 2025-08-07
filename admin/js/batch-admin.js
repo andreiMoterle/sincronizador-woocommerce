@@ -1,8 +1,16 @@
 /**
- * JavaScript para processamento em lote
+ * JavaScript para processamento em lote - REFATORADO
+ * Agora usa sincronizador-utils.js para eliminar duplicações
+ * @version 2.0.0
  */
 (function($) {
     'use strict';
+    
+    // Verificar se utilitários foram carregados
+    if (typeof window.SincronizadorWC === 'undefined' || !window.SincronizadorWC.Utils) {
+        console.error('❌ Sincronizador Utils não carregado! Batch funcionalidades podem falhar.');
+        return;
+    }
     
     var SincronizadorBatch = {
         currentBatchId: null,
@@ -33,7 +41,7 @@
             e.preventDefault();
             
             if (this.isProcessing) {
-                this.showToast('Já existe um processamento em andamento', 'warning');
+                window.SincronizadorWC.Utils.showNotice('Já existe um processamento em andamento', 'warning');
                 return;
             }
             
@@ -42,16 +50,17 @@
             var lojistas = this.getSelectedLojistas();
             
             if (produtos.length === 0) {
-                this.showToast('Selecione pelo menos um produto', 'error');
+                window.SincronizadorWC.Utils.showNotice('Selecione pelo menos um produto', 'error');
                 return;
             }
             
             if (lojistas.length === 0) {
-                this.showToast('Selecione pelo menos um lojista', 'error');
+                window.SincronizadorWC.Utils.showNotice('Selecione pelo menos um lojista', 'error');
                 return;
             }
             
-            this.showToast('Iniciando processamento em lote...', 'info');
+            window.SincronizadorWC.Utils.showNotice('Iniciando processamento em lote...', 'info');
+            window.SincronizadorWC.Utils.setLoadingState($btn, 'Iniciando...');
             
             $btn.prop('disabled', true).html('<span class="batch-processing-loader"></span>Iniciando...');
             
@@ -71,16 +80,16 @@
                         this.isProcessing = true;
                         this.updateBatchProgress(response.data.progress);
                         this.startStatusMonitoring();
-                        this.showToast('Processamento iniciado com sucesso!', 'success');
+                        window.SincronizadorWC.Utils.showNotice('Processamento iniciado com sucesso!', 'success');
                     } else {
-                        this.showToast('Erro ao iniciar processamento: ' + (response.data?.message || 'Erro desconhecido'), 'error');
+                        window.SincronizadorWC.Utils.showNotice('Erro ao iniciar processamento: ' + (response.data?.message || 'Erro desconhecido'), 'error');
                     }
                 }.bind(this),
                 error: function() {
-                    this.showToast('Erro de conexão ao iniciar processamento', 'error');
+                    window.SincronizadorWC.Utils.showNotice('Erro de conexão ao iniciar processamento', 'error');
                 }.bind(this),
                 complete: function() {
-                    $btn.prop('disabled', false).html('Iniciar Processamento');
+                    window.SincronizadorWC.Utils.clearLoadingState($btn, 'Iniciar Processamento');
                 }
             });
         },
@@ -156,7 +165,7 @@
             this.isProcessing = false;
             clearInterval(this.statusCheckInterval);
             
-            this.showToast('Processamento concluído com sucesso!', 'success');
+            window.SincronizadorWC.Utils.showNotice('Processamento concluído com sucesso!', 'success');
             
             // Habilitar botão de novo processamento
             $('.batch-btn-start').prop('disabled', false);
@@ -170,7 +179,7 @@
             this.isProcessing = false;
             clearInterval(this.statusCheckInterval);
             
-            this.showToast('Erro durante o processamento. Verifique os logs.', 'error');
+            window.SincronizadorWC.Utils.showNotice('Erro durante o processamento. Verifique os logs.', 'error');
             
             // Habilitar botões de retry
             $('.batch-btn-retry').prop('disabled', false);
@@ -193,7 +202,7 @@
                     if (response.success) {
                         this.isProcessing = false;
                         clearInterval(this.statusCheckInterval);
-                        this.showToast('Processamento pausado', 'info');
+                        window.SincronizadorWC.Utils.showNotice('Processamento pausado', 'info');
                     }
                 }.bind(this)
             });
@@ -221,7 +230,7 @@
                         this.isProcessing = false;
                         clearInterval(this.statusCheckInterval);
                         this.currentBatchId = null;
-                        this.showToast('Processamento interrompido', 'warning');
+                        window.SincronizadorWC.Utils.showNotice('Processamento interrompido', 'warning');
                         this.resetBatchUI();
                     }
                 }.bind(this)
@@ -231,7 +240,7 @@
         retryBatch: function(e) {
             e.preventDefault();
             // Implementar retry do último lote com falha
-            this.showToast('Funcionalidade de retry será implementada', 'info');
+            window.SincronizadorWC.Utils.showNotice('Funcionalidade de retry será implementada', 'info');
         },
         
         handleCacheAction: function(e) {
@@ -256,10 +265,10 @@
                 },
                 success: function(response) {
                     if (response.success) {
-                        this.showToast('Ação de cache executada com sucesso', 'success');
+                        window.SincronizadorWC.Utils.showNotice('Ação de cache executada com sucesso', 'success');
                         this.updateCacheStatus();
                     } else {
-                        this.showToast('Erro ao executar ação de cache', 'error');
+                        window.SincronizadorWC.Utils.showNotice('Erro ao executar ação de cache', 'error');
                     }
                 }.bind(this),
                 complete: function() {
@@ -396,7 +405,7 @@
                         this.isProcessing = true;
                         this.updateBatchProgress(activeBatch);
                         this.startStatusMonitoring();
-                        this.showToast('Processamento em andamento recuperado', 'info');
+                        window.SincronizadorWC.Utils.showNotice('Processamento em andamento recuperado', 'info');
                     }
                 }.bind(this)
             });
@@ -477,20 +486,11 @@
             } else {
                 return secs + 's';
             }
-        },
-        
-        showToast: function(message, type) {
-            type = type || 'info';
-            
-            var $toast = $('<div class="sincronizador-toast ' + type + '">' + message + '</div>');
-            $('body').append($toast);
-            
-            setTimeout(function() {
-                $toast.fadeOut(function() {
-                    $toast.remove();
-                });
-            }, 5000);
         }
+        
+        // REMOVIDO - DUPLICAÇÃO ELIMINADA
+        // showToast() agora é fornecido pelos utilitários centralizados
+        // @see admin/js/sincronizador-utils.js - showNotice()
     };
     
     // Inicializar quando o documento estiver pronto

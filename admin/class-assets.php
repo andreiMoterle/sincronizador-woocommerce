@@ -10,16 +10,24 @@ if (!defined('ABSPATH')) {
 
 class Sincronizador_WC_Assets {
     
+    /**
+     * Validador de permissões centralizado
+     */
+    private $permission_validator;
+    
     public function __construct() {
+        // Inicializar validador de permissões
+        $this->permission_validator = Sincronizador_WC_Permission_Validator::get_instance();
+        
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
     }
     
     /**
-     * Enfileira assets do admin
+     * Enfileira assets do admin - REFATORADO
      */
     public function enqueue_admin_assets($hook) {
-        // Verificar se estamos nas páginas do plugin
-        if (!$this->is_plugin_page($hook)) {
+        // Usar validador centralizado
+        if (!$this->permission_validator->is_plugin_page($hook)) {
             return;
         }
         
@@ -31,47 +39,64 @@ class Sincronizador_WC_Assets {
             SINCRONIZADOR_WC_VERSION
         );
         
-        // JavaScript
+        // JavaScript - Ordem de carregamento otimizada
+        
+        // 1. Utilitários centralizados (NOVO - elimina duplicações)
         wp_enqueue_script(
-            'sincronizador-wc-admin-js',
-            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/admin-scripts.js',
+            'sincronizador-wc-utils',
+            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/sincronizador-utils.js',
             array('jquery'),
             SINCRONIZADOR_WC_VERSION,
             true
         );
         
-        // Localizar script com dados necessários
+        // 2. Scripts principais (dependem dos utilitários)
+        wp_enqueue_script(
+            'sincronizador-wc-admin-js',
+            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/admin-scripts.js',
+            array('jquery', 'sincronizador-wc-utils'),
+            SINCRONIZADOR_WC_VERSION,
+            true
+        );
+        
+        // 3. Batch admin (se necessário)
+        if (strpos($hook, 'batch') !== false || strpos($hook, 'importar') !== false) {
+            wp_enqueue_script(
+                'sincronizador-wc-batch-admin',
+                SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/batch-admin.js',
+                array('jquery', 'sincronizador-wc-utils'),
+                SINCRONIZADOR_WC_VERSION,
+                true
+            );
+        }
+        
+        // Localizar script com dados necessários - CENTRALIZADO
         wp_localize_script('sincronizador-wc-admin-js', 'SincronizadorWC', array(
             'ajaxurl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('sincronizador_wc_nonce'),
             'strings' => array(
-                'confirmDelete' => 'Tem certeza que deseja remover?',
-                'loading' => 'Carregando...',
-                'error' => 'Erro na requisição',
-                'success' => 'Operação realizada com sucesso',
-                'validatingConnection' => 'Testando conexão...',
-                'connectionSuccess' => 'Conexão OK!',
-                'connectionError' => 'Erro na conexão',
-                'selectProducts' => 'Selecione pelo menos um produto',
-                'importingProducts' => 'Importando produtos...',
-                'syncingData' => 'Sincronizando dados...'
+                'confirmDelete' => __('Tem certeza que deseja remover?', 'sincronizador-wc'),
+                'loading' => __('Carregando...', 'sincronizador-wc'),
+                'error' => __('Erro na requisição', 'sincronizador-wc'),
+                'success' => __('Operação realizada com sucesso', 'sincronizador-wc'),
+                'validatingConnection' => __('Testando conexão...', 'sincronizador-wc'),
+                'connectionSuccess' => __('Conexão OK!', 'sincronizador-wc'),
+                'connectionError' => __('Erro na conexão', 'sincronizador-wc'),
+                'selectProducts' => __('Selecione pelo menos um produto', 'sincronizador-wc'),
+                'importingProducts' => __('Importando produtos...', 'sincronizador-wc'),
+                'syncingData' => __('Sincronizando dados...', 'sincronizador-wc'),
+                'processing' => __('Processando...', 'sincronizador-wc'),
+                'confirm_delete' => __('Tem certeza que deseja excluir?', 'sincronizador-wc')
             )
         ));
     }
     
     /**
-     * Verificar se estamos numa página do plugin
+     * REMOVIDO - DUPLICAÇÃO ELIMINADA
+     * 
+     * Verificação de páginas do plugin agora centralizada em 
+     * Sincronizador_WC_Permission_Validator::is_plugin_page()
+     * 
+     * @see admin/class-permission-validator.php
      */
-    private function is_plugin_page($hook) {
-        $plugin_pages = array(
-            'toplevel_page_sincronizador-wc',
-            'sincronizador-wc_page_sincronizador-wc-lojistas',
-            'sincronizador-wc_page_sincronizador-wc-add-lojista',
-            'sincronizador-wc_page_sincronizador-wc-importar',
-            'sincronizador-wc_page_sincronizador-wc-sincronizados',
-            'sincronizador-wc_page_sincronizador-wc-config'
-        );
-        
-        return in_array($hook, $plugin_pages);
-    }
 }

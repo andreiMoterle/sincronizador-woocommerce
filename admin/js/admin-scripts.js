@@ -1,25 +1,31 @@
 /**
- * JavaScript do Admin - Sincronizador WooCommerce
- * @version 1.1.0
+ * JavaScript do Admin - Sincronizador WooCommerce - REFATORADO
+ * Agora usa sincronizador-utils.js para eliminar duplicações
+ * @version 1.2.0
  */
 
 (function($) {
     'use strict';
 
-    // Controle de inicialização mais inteligente - baseado apenas no DOM ready
-    if (window.SincronizadorWCInitialized) {
+    // Verificar se utilitários foram carregados
+    if (typeof window.SincronizadorWC === 'undefined' || !window.SincronizadorWC.Utils) {
+        console.error('❌ Sincronizador Utils não carregado! Funcionalidades podem falhar.');
         return;
     }
-    window.SincronizadorWCInitialized = true;
 
-    // Variáveis globais - Inicialização segura
-    if (typeof window.SincronizadorWC === 'undefined') {
-        window.SincronizadorWC = {};
+    // Controle de inicialização
+    if (window.SincronizadorWCScriptsInitialized) {
+        return;
     }
-    
-    // Garantir que todas as propriedades existam
-    window.SincronizadorWC.ajaxurl = window.SincronizadorWC.ajaxurl || (typeof ajaxurl !== 'undefined' ? ajaxurl : '/wp-admin/admin-ajax.php');
-    window.SincronizadorWC.nonce = window.SincronizadorWC.nonce || '';
+    window.SincronizadorWCScriptsInitialized = true;
+
+    // Função para limpar modais órfãos do DOM
+    function limparModaisOrfaos() {
+        // Remover todos os modais de progresso órfãos
+        $('.modal-overlay, #modal-progresso, #modal-relatorio').remove();
+    }
+
+    // Variáveis globais específicas (não duplicadas nos utils)
     window.SincronizadorWC.currentImportId = window.SincronizadorWC.currentImportId || null;
     window.SincronizadorWC.progressInterval = window.SincronizadorWC.progressInterval || null;
     window.SincronizadorWC.produtosSincronizados = window.SincronizadorWC.produtosSincronizados || [];
@@ -28,25 +34,9 @@
         // Limpar modais órfãos imediatamente
         limparModaisOrfaos();
         
-        // Verificar se existe o nonce
-        if (!window.SincronizadorWC.nonce || window.SincronizadorWC.nonce === '') {
-            console.warn('⚠️ NONCE NÃO DEFINIDO! Os requests AJAX podem falhar.');
-            
-            // Tentar obter nonce de outro lugar se possível
-            const metaNonce = $('meta[name="sincronizador-wc-nonce"]').attr('content');
-            if (metaNonce) {
-                window.SincronizadorWC.nonce = metaNonce;
-            }
-        }
-        
+        // A validação de nonce agora é feita pelos utilitários centralizados
         initSincronizador();
     });
-
-    // Função para limpar modais órfãos do DOM
-    function limparModaisOrfaos() {
-        // Remover todos os modais de progresso órfãos
-        $('.modal-overlay, #modal-progresso, #modal-relatorio').remove();
-    }
 
     function initSincronizador() {
         // Detectar qual página estamos
@@ -188,7 +178,7 @@
         .done(function(response) {
             if (response.success) {
                 const data = response.data || {};
-                showNotice('✅ Conexão OK: ' + data.nome, 'success');
+                window.SincronizadorWC.Utils.showNotice('✅ Conexão OK: ' + data.nome, 'success');
                 buttonElement.removeClass('button-secondary').addClass('button-primary').text('✅ Conectado');
                 
                 // Voltar ao estado original após 3 segundos
@@ -197,7 +187,7 @@
                 }, 3000);
             } else {
                 const errorMessage = (response.data && response.data.message) ? response.data.message : 'Erro na conexão';
-                showNotice('❌ ' + errorMessage, 'error');
+                window.SincronizadorWC.Utils.showNotice('❌ ' + errorMessage, 'error');
                 buttonElement.removeClass('button-secondary').addClass('button-primary').css('background-color', '#dc3232').text('❌ Erro');
                 
                 // Voltar ao estado original após 3 segundos
@@ -207,7 +197,7 @@
             }
         })
         .fail(function(xhr, status, error) {
-            showNotice('❌ Erro de conexão: ' + error, 'error');
+            window.SincronizadorWC.Utils.showNotice('❌ Erro de conexão: ' + error, 'error');
             buttonElement.text('❌ Erro');
             
             setTimeout(function() {
@@ -1082,17 +1072,17 @@
             })
             .done(function(response) {
                 if (response.success) {
-                    showNotice('✅ Cache limpo com sucesso! Os produtos serão recarregados.', 'success');
+                    window.SincronizadorWC.Utils.showNotice('✅ Cache limpo com sucesso! Os produtos serão recarregados.', 'success');
                     // Recarregar automaticamente os produtos
                     setTimeout(() => {
                         loadProdutosSincronizados();
                     }, 1000);
                 } else {
-                    showNotice('❌ Erro ao limpar cache: ' + (response.data || 'Erro desconhecido'), 'error');
+                    window.SincronizadorWC.Utils.showNotice('❌ Erro ao limpar cache: ' + (response.data || 'Erro desconhecido'), 'error');
                 }
             })
             .fail(function(xhr, status, error) {
-                showNotice('❌ Erro de comunicação: ' + error, 'error');
+                window.SincronizadorWC.Utils.showNotice('❌ Erro de comunicação: ' + error, 'error');
             })
             .always(function() {
                 btn.prop("disabled", false).text(originalText);
@@ -1155,7 +1145,8 @@
             const lojistaId = $(this).data('lojista-id');
             
             if (lojistaId) {
-                testConnection(lojistaId);
+                // Usar função centralizada dos utilitários
+                window.SincronizadorWC.Utils.testConnection(lojistaId);
             } else {
                 alert('❌ ERRO: ID do lojista não encontrado para teste de conexão!');
             }
@@ -1206,7 +1197,8 @@
                 $('#connection-status').html('<span style="color: red;">❌ ID do lojista não encontrado</span>');
                 return;
             }
-            testConnection(lojistaId);
+            // Usar função centralizada dos utilitários
+            window.SincronizadorWC.Utils.testConnection(lojistaId);
         });
         
         // Change event para select de lojista
@@ -1227,50 +1219,26 @@
         });
     }
 
-    // === TESTE DE CONEXÃO === //
-    function testConnection(lojistaId) {
-        const $btn = $('#btn-test-connection');
-        const $status = $('#connection-status');
-        
-        if (!lojistaId) {
-            $status.html('<span style="color: red;">❌ ID do lojista não encontrado</span>');
-            return;
-        }
-        
-        // Desabilitar botão e mostrar loading
-        $btn.prop('disabled', true).text('🔄 Testando...');
-        $status.html('<span style="color: #0073aa;">⏳ ' + (SincronizadorWC.strings ? SincronizadorWC.strings.validatingConnection : 'Testando conexão...') + '</span>');
-        
-        // Fazer requisição AJAX
-        $.ajax({
-            url: SincronizadorWC.ajaxurl,
-            type: 'POST',
-            dataType: 'json',
-            data: {
-                action: 'sincronizador_wc_test_connection',
-                nonce: SincronizadorWC.nonce,
-                lojista_id: lojistaId
-            },
-            success: function(response) {
-                if (response.success) {
-                    $status.html('<span style="color: green;">✅ ' + response.data.message + '</span>');
-                } else {
-                    $status.html('<span style="color: red;">❌ ' + response.data + '</span>');
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Erro na requisição:', error);
-                $status.html('<span style="color: red;">❌ Erro na comunicação: ' + error + '</span>');
-            },
-            complete: function() {
-                // Reabilitar botão
-                $btn.prop('disabled', false).text('🔄 Testar Conexão');
-            }
-        });
-    }
-
+    // === TESTE DE CONEXÃO - REFATORADO ===
+    // REMOVIDO: função testConnection() duplicada
+    // Agora usa window.SincronizadorWC.Utils.testConnection() dos utilitários centralizados
+    
     function initConnectionTest() {
-        // A funcionalidade agora está na delegação de eventos globais
+        // Event listeners específicos para elementos customizados desta página
+        $('#btn-test-connection').on('click', function(e) {
+            e.preventDefault();
+            const lojistaId = $(this).data('lojista-id') || $('#lojista_destino').val();
+            
+            if (!lojistaId) {
+                window.SincronizadorWC.Utils.window.SincronizadorWC.Utils.showNotice('Selecione um lojista primeiro', 'error');
+                return;
+            }
+            
+            window.SincronizadorWC.Utils.testConnection(lojistaId, {
+                button: $(this),
+                status: $('#connection-status')
+            });
+        });
     }
 
     // === UTILITY FUNCTIONS === //
@@ -1314,22 +1282,9 @@
         return priceNum.toFixed(2).replace('.', ',');
     }
 
-    function showNotice(message, type = 'success') {
-        const noticeClass = type === 'success' ? 'notice-success' : 'notice-error';
-        const notice = $(`
-            <div class="notice ${noticeClass} is-dismissible fade-in">
-                <p>${message}</p>
-            </div>
-        `);
-        
-        $('.sincronizador-wc-wrap').prepend(notice);
-        
-        setTimeout(function() {
-            notice.fadeOut(function() {
-                $(this).remove();
-            });
-        }, 5000);
-    }
+    // REMOVIDO - DUPLICAÇÃO ELIMINADA
+    // window.SincronizadorWC.Utils.showNotice() agora é fornecido pelos utilitários centralizados
+    // @see admin/js/sincronizador-utils.js - window.SincronizadorWC.Utils.showNotice()
     
     // Sistema de progresso e sincronização
     function mostrarModalProgresso(lojistaName = 'Lojista') {
@@ -1610,8 +1565,11 @@
         });
     });
 
-    // Expor funções globalmente se necessário
-    window.SincronizadorWC.showNotice = showNotice;
+    // REMOVIDO - DUPLICAÇÃO ELIMINADA  
+    // showNotice agora é fornecido pelos utilitários centralizados
+    // window.SincronizadorWC.showNotice = showNotice; // REMOVIDO
+    
+    // Expor funções específicas que não são duplicadas
     window.SincronizadorWC.formatPrice = formatPrice;
     window.SincronizadorWC.limparModaisOrfaos = limparModaisOrfaos;
     

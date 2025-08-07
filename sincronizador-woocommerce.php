@@ -1209,6 +1209,10 @@ class Sincronizador_WooCommerce {
         
         // Admin
         if (is_admin()) {
+            if (file_exists(SINCRONIZADOR_WC_PLUGIN_DIR . 'admin/class-permission-validator.php')) {
+                require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'admin/class-permission-validator.php';
+            }
+            
             if (file_exists(SINCRONIZADOR_WC_PLUGIN_DIR . 'admin/class-admin.php')) {
                 require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'admin/class-admin.php';
             }

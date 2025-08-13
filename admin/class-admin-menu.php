@@ -10,6 +10,7 @@ if (!defined('ABSPATH')) {
 class Sincronizador_WC_Admin_Menu {
     
     public function __construct() {
+        error_log('DEBUG: Sincronizador_WC_Admin_Menu construtor chamado');
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_init', array($this, 'admin_init'));
     }
@@ -18,6 +19,7 @@ class Sincronizador_WC_Admin_Menu {
      * Adiciona menus do admin
      */
     public function add_admin_menu() {
+        error_log('DEBUG: add_admin_menu() chamado');
         // Menu principal
         add_menu_page(
             __('Sincronizador WC', 'sincronizador-wc'),
@@ -213,16 +215,31 @@ class Sincronizador_WC_Admin_Menu {
      * Página de Relatórios
      */
     public function relatorios_page() {
-        echo '<div class="wrap">';
-        echo '<h1>' . __('Relatórios de Vendas', 'sincronizador-wc') . '</h1>';
-        echo '<p>' . __('Relatórios detalhados de vendas e performance.', 'sincronizador-wc') . '</p>';
+        // Debug: verificar se o método está sendo chamado
+        error_log('DEBUG: relatorios_page() foi chamado');
         
-        echo '<div class="notice notice-info">';
-        echo '<p><strong>' . __('Funcionalidade em desenvolvimento:', 'sincronizador-wc') . '</strong> ';
-        echo __('Os relatórios serão implementados na próxima versão.', 'sincronizador-wc') . '</p>';
-        echo '</div>';
+        // Carregar estilos e scripts específicos da página de relatórios
+        wp_enqueue_script('chart-js', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '3.9.1', true);
+        wp_enqueue_style('sincronizador-wc-reports', plugins_url('admin/css/reports.css', dirname(__FILE__)), array(), '1.0.0');
+        wp_enqueue_script('sincronizador-wc-reports', plugins_url('admin/js/reports.js', dirname(__FILE__)), array('jquery', 'chart-js'), '1.0.0', true);
         
-        echo '</div>';
+        // Localizar script para AJAX
+        wp_localize_script('sincronizador-wc-reports', 'sincronizador_wc_ajax', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('sincronizador_wc_nonce')
+        ));
+        
+        // Debug: verificar se o template existe
+        $template_path = dirname(__FILE__) . '/templates/reports-page.php';
+        error_log('DEBUG: template path = ' . $template_path);
+        error_log('DEBUG: template exists = ' . (file_exists($template_path) ? 'YES' : 'NO'));
+        
+        // Incluir template
+        if (file_exists($template_path)) {
+            include_once $template_path;
+        } else {
+            echo '<div class="wrap"><h1>Erro: Template não encontrado</h1><p>Path: ' . $template_path . '</p></div>';
+        }
     }
     
     /**

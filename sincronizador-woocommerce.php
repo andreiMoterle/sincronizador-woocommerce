@@ -233,6 +233,16 @@ class Sincronizador_WooCommerce {
             'sincronizador-wc-config',
             array($this, 'config_page')
         );
+        
+        // Relatórios
+        add_submenu_page(
+            'sincronizador-wc',
+            'Relatórios',
+            'Relatórios',
+            'manage_woocommerce',
+            'sincronizador-wc-relatorios',
+            array($this, 'relatorios_page')
+        );
     }
     
     public function dashboard_page() {
@@ -1247,6 +1257,28 @@ class Sincronizador_WooCommerce {
         echo '</div>';
     }
     
+    public function relatorios_page() {
+        // Enfileirar estilos e scripts específicos para relatórios
+        wp_enqueue_style('sincronizador-reports-css', plugin_dir_url(__FILE__) . 'admin/css/reports.css', array(), '1.0.0');
+        wp_enqueue_script('chart-js', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '3.9.1', true);
+        wp_enqueue_script('sincronizador-reports-js', plugin_dir_url(__FILE__) . 'admin/js/reports.js', array('jquery', 'chart-js'), '1.0.0', true);
+        
+        // Localizar script para AJAX (usando nome consistente)
+        wp_localize_script('sincronizador-reports-js', 'sincronizadorReports', array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('sincronizador_reports_nonce')
+        ));
+        
+        // Debug para verificar se está sendo localizado
+        echo '<script>console.log("sincronizadorReports localizado:", ' . json_encode(array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('sincronizador_reports_nonce')
+        )) . ');</script>';
+        
+        // Incluir template da página de relatórios
+        include plugin_dir_path(__FILE__) . 'admin/templates/reports-page.php';
+    }
+    
     // Métodos auxiliares para gerenciar lojistas
     private function get_lojistas() {
         // Buscar lojistas reais do banco de dados
@@ -1478,6 +1510,8 @@ class Sincronizador_WooCommerce {
     }
     
     private function includes() {
+        error_log('DEBUG: includes() foi chamado');
+        
         // Classes principais
         if (file_exists(SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php')) {
             require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php';
@@ -1564,6 +1598,21 @@ class Sincronizador_WooCommerce {
         add_action('wp_ajax_sincronizador_wc_clear_cache', array($this, 'ajax_clear_cache'));
         add_action('wp_ajax_sync_produtos', array($this, 'ajax_sync_produtos'));
         
+        // AJAX handlers para relatórios
+        add_action('wp_ajax_sincronizador_wc_get_lojistas', array($this, 'ajax_get_lojistas'));
+        add_action('wp_ajax_sincronizador_wc_get_resumo_relatorio', array($this, 'ajax_get_resumo_relatorio'));
+        add_action('wp_ajax_sincronizador_wc_get_graficos_relatorio', array($this, 'ajax_get_graficos_relatorio'));
+        add_action('wp_ajax_sincronizador_wc_get_historico_relatorio', array($this, 'ajax_get_historico_relatorio'));
+        add_action('wp_ajax_sincronizador_wc_export_relatorio', array($this, 'ajax_export_relatorio'));
+        
+        // AJAX handlers para relatórios de vendas
+        add_action('wp_ajax_sincronizador_wc_get_lojistas_relatorios', array($this, 'ajax_get_lojistas_relatorios'));
+        add_action('wp_ajax_sincronizador_wc_get_resumo_vendas', array($this, 'ajax_get_resumo_vendas'));
+        add_action('wp_ajax_sincronizador_wc_get_vendas_por_lojista', array($this, 'ajax_get_vendas_por_lojista'));
+        add_action('wp_ajax_sincronizador_wc_get_produtos_mais_vendidos', array($this, 'ajax_get_produtos_mais_vendidos'));
+        add_action('wp_ajax_sincronizador_wc_get_vendas_detalhadas', array($this, 'ajax_get_vendas_detalhadas'));
+        add_action('wp_ajax_sincronizador_wc_export_vendas', array($this, 'ajax_export_vendas'));
+        
         // Inicializar classes se existirem
         add_action('plugins_loaded', array($this, 'init_classes'));
         
@@ -1598,8 +1647,18 @@ class Sincronizador_WooCommerce {
         }
         
         // Inicializar admin menu
-        if (is_admin() && class_exists('Sincronizador_WC_Admin_Menu')) {
-            new Sincronizador_WC_Admin_Menu();
+        if (is_admin()) {
+            error_log('DEBUG: is_admin() = TRUE');
+            // COMENTADO: Evitar conflito de duplo registro de menus
+            // if (class_exists('Sincronizador_WC_Admin_Menu')) {
+            //     error_log('DEBUG: Classe Sincronizador_WC_Admin_Menu existe, inicializando...');
+            //     new Sincronizador_WC_Admin_Menu();
+            // } else {
+            //     error_log('DEBUG: Classe Sincronizador_WC_Admin_Menu NÃO existe!');
+            // }
+            error_log('DEBUG: Usando apenas menus da classe principal');
+        } else {
+            error_log('DEBUG: is_admin() = FALSE');
         }
         
         // Inicializar AJAX
@@ -2575,13 +2634,16 @@ class Sincronizador_WooCommerce {
                 $variacoes_info = $this->get_variacoes_produto_optimized($produto_fabrica, $dados_destino);
             }
             
+            // STATUS DE PUBLICAÇÃO no destino (o que o usuário quer ver)
+            $status_publicacao = $dados_destino['status'] ?? 'unknown';
+            
             $produtos_sincronizados[] = array(
                 'id_fabrica' => $produto_fabrica->get_id(),
                 'id_destino' => $produto_id_destino,
                 'nome' => $produto_fabrica->get_name(),
                 'sku' => $produto_fabrica->get_sku(),
                 'imagem' => wp_get_attachment_image_url($produto_fabrica->get_image_id(), 'thumbnail') ?: 'https://via.placeholder.com/50x50',
-                'status' => $dados_destino ? 'sincronizado' : 'erro',
+                'status' => $status_publicacao, // ← AGORA É O STATUS DE PUBLICAÇÃO
                 'preco_fabrica' => $this->formatar_preco_produto($produto_fabrica),
                 'preco_destino' => $this->formatar_preco_destino($dados_destino),
                 'estoque_fabrica' => $produto_fabrica->get_stock_quantity() ?: 0,
@@ -2644,7 +2706,6 @@ class Sincronizador_WooCommerce {
             }
         }
         
-        error_log("📦 BATCH REQUEST: Obtidos " . count($produtos_data) . " produtos de " . count($produtos_ids) . " solicitados");
         return $produtos_data;
     }
     
@@ -2682,7 +2743,7 @@ class Sincronizador_WooCommerce {
                 'preco_destino' => 0, // Seria necessário outra requisição, omitir por performance
                 'estoque_fabrica' => $variacao_fabrica->get_stock_quantity() ?: 0,
                 'estoque_destino' => 0, // Seria necessário outra requisição, omitir por performance
-                'status' => 'sincronizado' // Assumir sincronizado se produto principal está sincronizado
+                'status' => 'sincronizado' // STATUS DE SINCRONIZAÇÃO: assumir sincronizado se produto principal está sincronizado
             );
         }
         
@@ -3233,6 +3294,641 @@ class Sincronizador_WooCommerce {
         
         error_log("❌ Lojista {$lojista_id} não encontrado para atualizar data de sync");
         return false;
+    }
+    /**
+     * AJAX: Obter lista de lojistas para filtros
+     */
+    public function ajax_get_lojistas() {
+        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die('Sem permissão');
+        }
+        
+        $lojistas = get_option('sincronizador_wc_lojistas', array());
+        $lojistas_formatados = array();
+        
+        foreach ($lojistas as $lojista) {
+            $lojistas_formatados[] = array(
+                'id' => $lojista['id'],
+                'nome' => $lojista['nome'],
+                'status' => $lojista['status'] ?? 'ativo'
+            );
+        }
+        
+        wp_send_json_success($lojistas_formatados);
+    }
+    
+    /**
+     * AJAX: Obter resumo dos relatórios
+     */
+    public function ajax_get_resumo_relatorio() {
+        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die('Sem permissão');
+        }
+        
+        $filtros = isset($_POST['filtros']) ? $_POST['filtros'] : array();
+        
+        // Simular dados por enquanto
+        $resumo = array(
+            'produtos_sincronizados' => 150,
+            'sincronizacoes_sucesso' => 140,
+            'sincronizacoes_erro' => 10,
+            'total_vendas' => 850
+        );
+        
+        wp_send_json_success($resumo);
+    }
+    
+    /**
+     * AJAX: Obter dados dos gráficos
+     */
+    public function ajax_get_graficos_relatorio() {
+        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die('Sem permissão');
+        }
+        
+        $filtros = isset($_POST['filtros']) ? $_POST['filtros'] : array();
+        
+        // Simular dados por enquanto
+        $graficos = array(
+            'sincronizacoes_por_dia' => array(
+                'labels' => ['01/08', '02/08', '03/08', '04/08', '05/08', '06/08', '07/08'],
+                'valores' => [12, 19, 3, 17, 6, 3, 7]
+            ),
+            'status_produtos' => array(
+                'labels' => ['Sucesso', 'Erro', 'Pendente'],
+                'valores' => [140, 10, 5]
+            )
+        );
+        
+        wp_send_json_success($graficos);
+    }
+    
+    /**
+     * AJAX: Obter histórico de sincronizações
+     */
+    public function ajax_get_historico_relatorio() {
+        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die('Sem permissão');
+        }
+        
+        $filtros = isset($_POST['filtros']) ? $_POST['filtros'] : array();
+        $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
+        $per_page = isset($_POST['per_page']) ? intval($_POST['per_page']) : 10;
+        
+        // Simular dados por enquanto
+        $items = array();
+        for ($i = 1; $i <= 15; $i++) {
+            $items[] = array(
+                'id' => $i,
+                'data_hora' => date('Y-m-d H:i:s', strtotime("-{$i} hours")),
+                'lojista' => 'Loja Teste ' . ($i % 3 + 1),
+                'tipo' => $i % 2 == 0 ? 'sync' : 'import',
+                'produtos' => rand(1, 50),
+                'status' => $i % 5 == 0 ? 'erro' : 'sucesso',
+                'detalhes' => $i % 5 == 0 ? 'Erro de conexão' : 'Processado com sucesso'
+            );
+        }
+        
+        // Paginação simulada
+        $start = ($page - 1) * $per_page;
+        $items_pagina = array_slice($items, $start, $per_page);
+        
+        $response = array(
+            'items' => $items_pagina,
+            'pagination' => array(
+                'total' => count($items),
+                'page' => $page,
+                'per_page' => $per_page,
+                'pages' => ceil(count($items) / $per_page)
+            )
+        );
+        
+        wp_send_json_success($response);
+    }
+    
+    /**
+     * AJAX: Exportar dados dos relatórios
+     */
+    public function ajax_export_relatorio() {
+        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die('Sem permissão');
+        }
+        
+        $formato = isset($_POST['formato']) ? sanitize_text_field($_POST['formato']) : 'csv';
+        $filtros = isset($_POST['filtros']) ? json_decode(stripslashes($_POST['filtros']), true) : array();
+        
+        // Por enquanto apenas CSV
+        if ($formato === 'csv') {
+            $this->exportar_csv($filtros);
+        } else {
+            wp_die('Formato não suportado ainda');
+        }
+    }
+    
+    /**
+     * Exportar dados em formato CSV
+     */
+    private function exportar_csv($filtros) {
+        $filename = 'relatorio_sincronizacao_' . date('Y-m-d_H-i-s') . '.csv';
+        
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=' . $filename);
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        
+        $output = fopen('php://output', 'w');
+        
+        // Cabeçalhos
+        fputcsv($output, array('Data/Hora', 'Lojista', 'Tipo', 'Produtos', 'Status', 'Detalhes'));
+        
+        // Dados simulados
+        for ($i = 1; $i <= 50; $i++) {
+            fputcsv($output, array(
+                date('d/m/Y H:i:s', strtotime("-{$i} hours")),
+                'Loja Teste ' . ($i % 3 + 1),
+                $i % 2 == 0 ? 'Sincronização' : 'Importação',
+                rand(1, 50),
+                $i % 5 == 0 ? 'Erro' : 'Sucesso',
+                $i % 5 == 0 ? 'Erro de conexão' : 'Processado com sucesso'
+            ));
+        }
+        
+        fclose($output);
+        exit;
+    }
+    
+    // === NOVOS AJAX Handlers para Relatórios de Vendas ===
+    
+    /**
+     * AJAX: Obter lojistas para relatórios
+     */
+    public function ajax_get_lojistas_relatorios() {
+        check_ajax_referer('sincronizador_reports_nonce', 'nonce');
+        
+        $lojistas = $this->get_lojistas();
+        $lojistas_ativos = array_filter($lojistas, function($lojista) {
+            return isset($lojista['ativo']) && $lojista['ativo'];
+        });
+        
+        error_log('DEBUG: Lojistas REAIS encontrados: ' . count($lojistas_ativos));
+        error_log('DEBUG: Lojistas REAIS: ' . print_r($lojistas_ativos, true));
+        
+        wp_send_json_success(array_values($lojistas_ativos));
+    }
+    
+    /**
+     * AJAX: Obter resumo de vendas
+     */
+    public function ajax_get_resumo_vendas() {
+        check_ajax_referer('sincronizador_reports_nonce', 'nonce');
+        
+        $filtros = isset($_POST['filtros']) ? $_POST['filtros'] : array();
+        
+        // Se os filtros vêm como JSON, decodificar
+        if (is_string($filtros)) {
+            $filtros = json_decode($filtros, true);
+        }
+        
+        $periodo = isset($filtros['periodo']) ? intval($filtros['periodo']) : 30;
+        $lojista_filtro = isset($filtros['lojista']) ? $filtros['lojista'] : '';
+        
+        // Calcular data de início baseada no período
+        $data_inicio = date('Y-m-d', strtotime("-{$periodo} days"));
+        $data_fim = date('Y-m-d');
+        
+        error_log("DEBUG: Buscando vendas reais - Período: {$periodo} dias, De: {$data_inicio} até {$data_fim}");
+        
+        // Buscar pedidos WooCommerce do período
+        $args = array(
+            'limit' => -1,
+            'status' => array('completed', 'processing', 'on-hold'),
+            'date_created' => $data_inicio . '...' . $data_fim,
+            'return' => 'ids'
+        );
+        
+        $pedido_ids = wc_get_orders($args);
+        
+        $total_vendas = 0;
+        $total_pedidos = count($pedido_ids);
+        $produtos_vendidos = 0;
+        
+        foreach ($pedido_ids as $pedido_id) {
+            $pedido = wc_get_order($pedido_id);
+            if ($pedido) {
+                $total_vendas += floatval($pedido->get_total());
+                $produtos_vendidos += $pedido->get_item_count();
+            }
+        }
+        
+        // Contar lojistas ativos REAIS
+        $lojistas = $this->get_lojistas();
+        $lojistas_ativos = 0;
+        foreach ($lojistas as $lojista) {
+            if (isset($lojista['ativo']) && $lojista['ativo']) {
+                $lojistas_ativos++;
+            }
+        }
+        
+        $resumo = array(
+            'total_vendas' => $total_vendas,
+            'total_pedidos' => $total_pedidos,
+            'produtos_vendidos' => $produtos_vendidos,
+            'lojistas_ativos' => $lojistas_ativos
+        );
+        
+        error_log("DEBUG: Resumo REAL calculado: " . print_r($resumo, true));
+        
+        wp_send_json_success($resumo);
+    }
+    
+    /**
+     * AJAX: Obter vendas por lojista
+     */
+    public function ajax_get_vendas_por_lojista() {
+        check_ajax_referer('sincronizador_reports_nonce', 'nonce');
+        
+        $filtros = isset($_POST['filtros']) ? $_POST['filtros'] : array();
+        
+        // Se os filtros vêm como JSON, decodificar
+        if (is_string($filtros)) {
+            $filtros = json_decode($filtros, true);
+        }
+        
+        $periodo = isset($filtros['periodo']) ? intval($filtros['periodo']) : 30;
+        
+        // Calcular data de início baseada no período
+        $data_inicio = date('Y-m-d', strtotime("-{$periodo} days"));
+        $data_fim = date('Y-m-d');
+        
+        $lojistas = $this->get_lojistas();
+        
+        $dados_grafico = array(
+            'labels' => array(),
+            'valores' => array()
+        );
+        
+        // Para cada lojista REAL, calcular suas vendas
+        foreach ($lojistas as $lojista) {
+            if (isset($lojista['ativo']) && $lojista['ativo']) {
+                $dados_grafico['labels'][] = $lojista['nome'];
+                
+                // Aqui você precisa implementar a lógica para calcular vendas REAIS de cada lojista
+                // Por enquanto, vou buscar vendas gerais do WooCommerce
+                // Você deve adaptar para identificar vendas por lojista específico
+                
+                $args = array(
+                    'limit' => -1,
+                    'status' => array('completed', 'processing'),
+                    'date_created' => $data_inicio . '...' . $data_fim,
+                    'return' => 'ids'
+                );
+                
+                $pedido_ids = wc_get_orders($args);
+                $vendas_lojista = 0;
+                
+                // TODO: Implementar filtro por lojista específico
+                // Por enquanto, dividir vendas totais pelo número de lojistas
+                foreach ($pedido_ids as $pedido_id) {
+                    $pedido = wc_get_order($pedido_id);
+                    if ($pedido) {
+                        $vendas_lojista += floatval($pedido->get_total());
+                    }
+                }
+                
+                // Dividir pelo número de lojistas ativos (temporário)
+                $num_lojistas_ativos = count(array_filter($lojistas, function($l) { 
+                    return isset($l['ativo']) && $l['ativo']; 
+                }));
+                
+                if ($num_lojistas_ativos > 0) {
+                    $vendas_lojista = $vendas_lojista / $num_lojistas_ativos;
+                }
+                
+                $dados_grafico['valores'][] = floatval($vendas_lojista);
+            }
+        }
+        
+        error_log("DEBUG: Dados gráfico REAIS: " . print_r($dados_grafico, true));
+        
+        wp_send_json_success($dados_grafico);
+    }
+    
+    /**
+     * AJAX: Obter produtos mais vendidos
+     */
+    public function ajax_get_produtos_mais_vendidos() {
+        check_ajax_referer('sincronizador_reports_nonce', 'nonce');
+        
+        $filtros = isset($_POST['filtros']) ? $_POST['filtros'] : array();
+        
+        // Se os filtros vêm como JSON, decodificar
+        if (is_string($filtros)) {
+            $filtros = json_decode($filtros, true);
+        }
+        
+        $lojista_filtro = isset($filtros['lojista']) ? $filtros['lojista'] : '';
+        $periodo = isset($filtros['periodo']) ? intval($filtros['periodo']) : 30;
+        
+        // Calcular data de início baseada no período
+        $data_inicio = date('Y-m-d', strtotime("-{$periodo} days"));
+        $data_fim = date('Y-m-d');
+        
+        error_log('DEBUG: Buscando produtos mais vendidos REAIS - Período: ' . $periodo . ' dias');
+        error_log('DEBUG: Lojista filtro: ' . $lojista_filtro);
+        
+        // Buscar produtos mais vendidos REAIS do WooCommerce
+        global $wpdb;
+        
+        // Query corrigida para usar as tabelas corretas do WooCommerce
+        $query = "
+            SELECT 
+                p.post_title as nome,
+                p.ID as produto_id,
+                pm.meta_value as sku,
+                SUM(CAST(oim_qty.meta_value AS UNSIGNED)) as quantidade_vendida,
+                SUM(CAST(oim_total.meta_value AS DECIMAL(10,2))) as receita_total,
+                AVG(CAST(oim_total.meta_value AS DECIMAL(10,2)) / CAST(oim_qty.meta_value AS DECIMAL(10,2))) as preco_medio
+            FROM {$wpdb->posts} p
+            INNER JOIN {$wpdb->prefix}woocommerce_order_items oi ON oi.order_item_name = p.post_title
+            INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim_qty ON oi.order_item_id = oim_qty.order_item_id AND oim_qty.meta_key = '_qty'
+            INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim_total ON oi.order_item_id = oim_total.order_item_id AND oim_total.meta_key = '_line_total'
+            INNER JOIN {$wpdb->posts} orders ON oi.order_id = orders.ID
+            LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_sku'
+            WHERE p.post_type = 'product'
+            AND p.post_status = 'publish'
+            AND orders.post_status IN ('wc-completed', 'wc-processing', 'wc-on-hold')
+            AND orders.post_date >= %s
+            AND orders.post_date <= %s
+            AND CAST(oim_qty.meta_value AS UNSIGNED) > 0
+            GROUP BY p.ID, p.post_title, pm.meta_value
+            ORDER BY quantidade_vendida DESC
+            LIMIT 10
+        ";
+        
+        $produtos_raw = $wpdb->get_results($wpdb->prepare($query, $data_inicio, $data_fim . ' 23:59:59'));
+        
+        error_log('DEBUG: Query produtos executada, resultados: ' . count($produtos_raw));
+        
+        // Buscar nome do lojista selecionado
+        $nome_lojista = 'WooCommerce';
+        if (!empty($lojista_filtro) && $lojista_filtro !== '' && $lojista_filtro !== 'todos') {
+            $lojistas = $this->get_lojistas();
+            foreach ($lojistas as $lojista) {
+                if ($lojista['id'] == $lojista_filtro) {
+                    $nome_lojista = $lojista['nome'];
+                    break;
+                }
+            }
+        }
+        
+        $produtos = array();
+        foreach ($produtos_raw as $produto) {
+            $produtos[] = array(
+                'nome' => $produto->nome,
+                'sku' => $produto->sku ?: 'N/A',
+                'lojista' => $nome_lojista, // Usar nome do lojista selecionado
+                'quantidade_vendida' => intval($produto->quantidade_vendida),
+                'receita_total' => floatval($produto->receita_total),
+                'preco_medio' => floatval($produto->preco_medio)
+            );
+        }
+        
+        // Se não houver produtos vendidos, buscar produtos disponíveis
+        if (empty($produtos)) {
+            error_log('DEBUG: Nenhum produto vendido encontrado, buscando produtos disponíveis');
+            
+            $args = array(
+                'post_type' => 'product',
+                'post_status' => 'publish',
+                'posts_per_page' => 10,
+                'meta_query' => array(
+                    array(
+                        'key' => '_stock_status',
+                        'value' => 'instock',
+                        'compare' => '='
+                    )
+                )
+            );
+            
+            $produtos_query = new WP_Query($args);
+            
+            if ($produtos_query->have_posts()) {
+                while ($produtos_query->have_posts()) {
+                    $produtos_query->the_post();
+                    $produto = wc_get_product(get_the_ID());
+                    
+                    if ($produto) {
+                        $produtos[] = array(
+                            'nome' => $produto->get_name(),
+                            'sku' => $produto->get_sku() ?: 'N/A',
+                            'lojista' => $nome_lojista, // Usar nome do lojista selecionado
+                            'quantidade_vendida' => 0,
+                            'receita_total' => 0.00,
+                            'preco_medio' => floatval($produto->get_price())
+                        );
+                    }
+                }
+                wp_reset_postdata();
+            }
+        }
+        
+        // Filtrar por lojista se especificado (implementar quando houver identificação de lojista)
+        if (!empty($lojista_filtro) && $lojista_filtro !== 'todos' && $lojista_filtro !== '') {
+            error_log('DEBUG: Filtrando por lojista: ' . $lojista_filtro);
+            // TODO: Implementar filtro por lojista quando houver campo no produto
+        }
+        
+        error_log('DEBUG: Produtos encontrados: ' . count($produtos));
+        
+        wp_send_json_success(array_values($produtos));
+    }
+    
+    /**
+     * AJAX: Obter vendas detalhadas
+     */
+    /**
+     * AJAX: Obter vendas detalhadas
+     */
+    public function ajax_get_vendas_detalhadas() {
+        check_ajax_referer('sincronizador_reports_nonce', 'nonce');
+        
+        $filtros = isset($_POST['filtros']) ? $_POST['filtros'] : array();
+        $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
+        $per_page = isset($_POST['per_page']) ? intval($_POST['per_page']) : 10;
+        
+        // Se os filtros vêm como JSON, decodificar
+        if (is_string($filtros)) {
+            $filtros = json_decode($filtros, true);
+        }
+        
+        $periodo = isset($filtros['periodo']) ? intval($filtros['periodo']) : 30;
+        $lojista_filtro = isset($filtros['lojista']) ? $filtros['lojista'] : '';
+        
+        // Calcular data de início baseada no período
+        $data_inicio = date('Y-m-d', strtotime("-{$periodo} days"));
+        $data_fim = date('Y-m-d');
+        
+        error_log("DEBUG: Buscando vendas detalhadas REAIS - Página: {$page}, Por página: {$per_page}");
+        
+        // Buscar pedidos REAIS do WooCommerce
+        $offset = ($page - 1) * $per_page;
+        
+        $args = array(
+            'limit' => $per_page,
+            'offset' => $offset,
+            'status' => array('completed', 'processing', 'on-hold', 'pending'),
+            'date_created' => $data_inicio . '...' . $data_fim,
+            'orderby' => 'date',
+            'order' => 'DESC'
+        );
+        
+        $pedidos = wc_get_orders($args);
+        
+        // Contar total para paginação
+        $args_count = array(
+            'limit' => -1,
+            'status' => array('completed', 'processing', 'on-hold', 'pending'),
+            'date_created' => $data_inicio . '...' . $data_fim,
+            'return' => 'ids'
+        );
+        
+        $total_pedidos = count(wc_get_orders($args_count));
+        
+        // Buscar nome do lojista selecionado
+        $nome_lojista = 'WooCommerce';
+        if (!empty($lojista_filtro) && $lojista_filtro !== '' && $lojista_filtro !== 'todos') {
+            $lojistas = $this->get_lojistas();
+            foreach ($lojistas as $lojista) {
+                if ($lojista['id'] == $lojista_filtro) {
+                    $nome_lojista = $lojista['nome'];
+                    break;
+                }
+            }
+        }
+        
+        $vendas = array();
+        foreach ($pedidos as $pedido) {
+            $status_labels = array(
+                'completed' => 'Concluído',
+                'processing' => 'Processando',
+                'on-hold' => 'Em espera',
+                'pending' => 'Pendente',
+                'cancelled' => 'Cancelado',
+                'refunded' => 'Reembolsado',
+                'failed' => 'Falhou'
+            );
+            
+            $status = $pedido->get_status();
+            $status_nome = isset($status_labels[$status]) ? $status_labels[$status] : ucfirst($status);
+            
+            $data_pedido = $pedido->get_date_created();
+            $data_formatada = '';
+            
+            if ($data_pedido) {
+                try {
+                    // Tentar várias formas de formatação
+                    if (method_exists($data_pedido, 'date')) {
+                        $data_formatada = $data_pedido->date('d/m/Y H:i');
+                    } else if (method_exists($data_pedido, 'format')) {
+                        $data_formatada = $data_pedido->format('d/m/Y H:i');
+                    } else if (method_exists($data_pedido, '__toString')) {
+                        $timestamp = strtotime($data_pedido->__toString());
+                        $data_formatada = date('d/m/Y H:i', $timestamp);
+                    } else {
+                        // Última tentativa - converter para string e parsejar
+                        $data_string = (string) $data_pedido;
+                        $timestamp = strtotime($data_string);
+                        if ($timestamp !== false) {
+                            $data_formatada = date('d/m/Y H:i', $timestamp);
+                        } else {
+                            $data_formatada = date('d/m/Y H:i'); // Data atual como fallback
+                        }
+                    }
+                } catch (Exception $e) {
+                    error_log('DEBUG: Erro ao formatar data do pedido #' . $pedido->get_order_number() . ': ' . $e->getMessage());
+                    $data_formatada = date('d/m/Y H:i'); // Data atual como fallback
+                }
+            } else {
+                $data_formatada = date('d/m/Y H:i'); // Data atual como fallback
+                error_log('DEBUG: Data do pedido é null para pedido #' . $pedido->get_order_number());
+            }
+            
+            error_log('DEBUG: Data formatada para pedido #' . $pedido->get_order_number() . ': ' . $data_formatada);
+            
+            $vendas[] = array(
+                'data' => $data_formatada,
+                'lojista' => $nome_lojista, // Usar nome do lojista selecionado
+                'pedido' => '#' . $pedido->get_order_number(),
+                'cliente' => $pedido->get_billing_first_name() . ' ' . $pedido->get_billing_last_name(),
+                'produtos' => $pedido->get_item_count() . ' itens',
+                'valor_total' => floatval($pedido->get_total()),
+                'status' => $status,
+                'status_nome' => $status_nome
+            );
+        }
+        
+        $total_pages = ceil($total_pedidos / $per_page);
+        
+        $response = array(
+            'items' => $vendas,
+            'pagination' => array(
+                'total' => $total_pedidos,
+                'page' => $page,
+                'per_page' => $per_page,
+                'total_pages' => $total_pages
+            )
+        );
+        
+        error_log("DEBUG: Vendas detalhadas encontradas: " . count($vendas) . " de " . $total_pedidos);
+        
+        wp_send_json_success($response);
+    }
+
+    /**
+     * AJAX: Exportar vendas
+     */
+    public function ajax_export_vendas() {
+        check_ajax_referer('sincronizador_reports_nonce', 'nonce');
+        
+        $formato = isset($_POST['formato']) ? sanitize_text_field($_POST['formato']) : 'csv';
+        $filtros = isset($_POST['filtros']) ? json_decode(stripslashes($_POST['filtros']), true) : array();
+        
+        // Por enquanto, simular exportação
+        if ($formato === 'csv') {
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="vendas-' . date('Y-m-d') . '.csv"');
+            
+            $output = fopen('php://output', 'w');
+            
+            // Cabeçalho CSV
+            fputcsv($output, array('Data', 'Lojista', 'Pedido', 'Cliente', 'Valor Total', 'Status'));
+            
+            // Dados simulados
+            $vendas = array(
+                array('2024-08-12 14:30:00', 'Loja Tech Master', '#2024001', 'João Silva', 'R$ 1.299,90', 'Concluído'),
+                array('2024-08-12 10:15:00', 'TechStore Plus', '#2024002', 'Maria Santos', 'R$ 2.499,99', 'Processando'),
+                array('2024-08-11 16:45:00', 'Som & Música', '#2024003', 'Pedro Costa', 'R$ 419,94', 'Concluído')
+            );
+            
+            foreach ($vendas as $venda) {
+                fputcsv($output, $venda);
+            }
+            
+            fclose($output);
+            exit;
+        }
+        
+        wp_send_json_error('Formato não suportado');
     }
 }
 

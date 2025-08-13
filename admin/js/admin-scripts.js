@@ -661,7 +661,32 @@
         }
         
         produtos.forEach(function(produto) {
-            const statusClass = produto.status === "sincronizado" ? "status-ativo" : "status-erro";
+            // Status de publicação (agora produto.status é o status de publicação)
+            const statusPublicacao = produto.status || 'unknown';
+            let statusText = '';
+            let statusClass = '';
+            
+            switch(statusPublicacao) {
+                case 'publish':
+                    statusText = '🟢 Publicado';
+                    statusClass = 'status-publicado';
+                    break;
+                case 'draft':
+                    statusText = '🟡 Rascunho';
+                    statusClass = 'status-rascunho';
+                    break;
+                case 'private':
+                    statusText = '🔒 Privado';
+                    statusClass = 'status-privado';
+                    break;
+                case 'pending':
+                    statusText = '⏳ Pendente';
+                    statusClass = 'status-pendente';
+                    break;
+                default:
+                    statusText = '❓ Desconhecido';
+                    statusClass = 'status-desconhecido';
+            }
             
             // Processar vendas - pode ser um número ou objeto complexo
             let vendasText = "N/A";
@@ -704,7 +729,7 @@
                         </small>
                     </td>
                     <td><strong>${produto.id_destino || "N/A"}</strong></td>
-                    <td><span class="produto-status ${statusClass}">${produto.status}</span></td>
+                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                     <td><strong>${vendasText}</strong></td>
                     <td>
                         <button type="button" class="button button-small btn-ver-detalhes" 

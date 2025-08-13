@@ -73,7 +73,7 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
                         <th class="column-id">ID Fábrica</th>
                         <th>Nome</th>
                         <th class="column-id">ID Destino</th>
-                        <th class="column-status">Status</th>
+                        <th class="column-status">Status Publicação</th>
                         <th class="column-vendas">Vendas</th>
                         <th class="column-acoes">Ações</th>
                     </tr>

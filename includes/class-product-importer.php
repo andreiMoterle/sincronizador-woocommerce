@@ -561,17 +561,25 @@ class Sincronizador_WC_Product_Importer {
         }
 
         // Marcas (brands) - tentar diferentes taxonomias
-        $taxonomias_marca = array('product_brand', 'pwb-brand', 'brand', 'brands');
+        $taxonomias_marca = array('product_brand', 'pwb-brand', 'brand', 'brands', 'pa_brand', 'yith_product_brand', 'product-brand', 'wc_brand');
         $marcas_encontradas = array();
+        $debug_info = "Produto ID: " . $produto->get_id() . " | ";
+        
+        error_log("IMPORTAÇÃO DEBUG - Iniciando busca de marcas para produto ID: " . $produto->get_id());
         
         foreach ($taxonomias_marca as $taxonomia) {
             $marcas = wp_get_post_terms($produto->get_id(), $taxonomia);
+            $debug_info .= "Tax '{$taxonomia}': " . (is_wp_error($marcas) ? "ERRO" : count($marcas)) . " | ";
+            
             if (!empty($marcas) && !is_wp_error($marcas)) {
                 $marcas_encontradas = $marcas;
-                error_log("IMPORTAÇÃO DEBUG - Marcas encontradas na taxonomia '{$taxonomia}': " . print_r($marcas, true));
+                $debug_info .= "✅ ENCONTROU: " . $marcas[0]->name . " | ";
+                error_log("IMPORTAÇÃO DEBUG - SUCESSO! Marcas encontradas na taxonomia '{$taxonomia}': " . $marcas[0]->name);
                 break;
             }
         }
+        
+        error_log("IMPORTAÇÃO DEBUG - Resumo: " . $debug_info);
         
         if (!empty($marcas_encontradas)) {
             $dados['brands'] = array();
@@ -1263,6 +1271,8 @@ class Sincronizador_WC_Product_Importer {
      * Resolver marcas no destino
      */
     private function resolver_marcas_destino($destino_url, $consumer_key, $consumer_secret, $marcas) {
+        error_log("IMPORTAÇÃO DEBUG - resolver_marcas_destino() chamada com " . count($marcas) . " marcas");
+        
         $marcas_resolvidas = array();
         
         foreach ($marcas as $marca_data) {

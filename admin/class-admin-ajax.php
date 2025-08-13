@@ -61,13 +61,14 @@ class Sincronizador_WC_Admin_Ajax {
         
         $product_id = intval($_POST['product_id']);
         $lojistas = array_map('intval', $_POST['lojistas']);
+        $percentuais = isset($_POST['percentuais']) ? $_POST['percentuais'] : array();
         
         if (!$product_id || empty($lojistas)) {
             wp_send_json_error(array('message' => __('Dados inválidos', 'sincronizador-wc')));
         }
         
         $product_importer = new Sincronizador_WC_Product_Importer();
-        $results = $product_importer->import_product_to_lojistas($product_id, $lojistas);
+        $results = $product_importer->import_product_to_lojistas($product_id, $lojistas, $percentuais);
         
         $success_count = 0;
         $error_count = 0;

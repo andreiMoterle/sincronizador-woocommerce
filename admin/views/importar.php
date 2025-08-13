@@ -139,13 +139,45 @@ if (!defined('ABSPATH')) {
                 <input type="hidden" id="import-product-id" name="product_id" value="">
                 
                 <div class="lojistas-list">
-                    <?php foreach ($lojistas as $lojista): ?>
-                        <label class="lojista-checkbox">
-                            <input type="checkbox" name="lojistas[]" value="<?php echo esc_attr($lojista->id); ?>">
-                            <span class="lojista-name"><?php echo esc_html($lojista->nome); ?></span>
-                            <span class="lojista-url"><?php echo esc_html($lojista->url_loja); ?></span>
-                        </label>
-                    <?php endforeach; ?>
+                    <?php 
+                    $lojistas = get_option('sincronizador_wc_lojistas', array());
+                    
+                    // DEBUG: Mostrar informações dos lojistas
+                    error_log('IMPORTAR.PHP DEBUG - Total de lojistas encontrados: ' . count($lojistas));
+                    error_log('IMPORTAR.PHP DEBUG - Dados dos lojistas: ' . print_r($lojistas, true));
+                    
+                    if (empty($lojistas)) {
+                        echo '<p style="color: red; font-weight: bold;">⚠️ NENHUM LOJISTA CADASTRADO!</p>';
+                        echo '<p>Vá em <strong>Sincronizador WC > Dashboard</strong> e cadastre alguns lojistas primeiro.</p>';
+                    } else {
+                        foreach ($lojistas as $lojista): 
+                    ?>
+                        <div class="lojista-item">
+                            <label class="lojista-checkbox">
+                                <input type="checkbox" name="lojistas[]" value="<?php echo esc_attr($lojista['id']); ?>">
+                                <span class="lojista-name"><?php echo esc_html($lojista['nome']); ?></span>
+                                <span class="lojista-url"><?php echo esc_html($lojista['url']); ?></span>
+                            </label>
+                            <div class="lojista-percentual">
+                                <label for="percentual_<?php echo esc_attr($lojista['id']); ?>">
+                                    <?php _e('Percentual de acréscimo:', 'sincronizador-wc'); ?>
+                                </label>
+                                <input type="number" 
+                                       id="percentual_<?php echo esc_attr($lojista['id']); ?>"
+                                       name="percentual[<?php echo esc_attr($lojista['id']); ?>]"
+                                       value="<?php echo isset($lojista['percentual_acrescimo']) ? esc_attr($lojista['percentual_acrescimo']) : '0'; ?>"
+                                       min="0" 
+                                       max="1000" 
+                                       step="0.1"
+                                       placeholder="0">
+                                <span class="percentual-symbol">%</span>
+                                <p class="description"><?php _e('Ex: 50 = +50% no preço', 'sincronizador-wc'); ?></p>
+                            </div>
+                        </div>
+                    <?php 
+                        endforeach; 
+                    } // fim do else
+                    ?>
                 </div>
                 
                 <div class="modal-actions">
@@ -307,7 +339,7 @@ if (!defined('ABSPATH')) {
 }
 
 .lojistas-list {
-    max-height: 300px;
+    max-height: 400px;
     overflow-y: auto;
     border: 1px solid #ccd0d4;
     border-radius: 4px;
@@ -315,11 +347,74 @@ if (!defined('ABSPATH')) {
     margin-bottom: 20px;
 }
 
+.lojista-item {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 15px;
+    padding: 15px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #f9f9f9;
+}
+
 .lojista-checkbox {
-    display: block;
-    padding: 10px;
-    border-bottom: 1px solid #f0f0f1;
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
     cursor: pointer;
+}
+
+.lojista-checkbox input[type="checkbox"] {
+    margin-right: 10px;
+}
+
+.lojista-name {
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.lojista-url {
+    color: #666;
+    font-size: 12px;
+}
+
+.lojista-percentual {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 5px;
+    flex-wrap: wrap;
+}
+
+.lojista-percentual label {
+    font-size: 12px;
+    color: #666;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.lojista-percentual input[type="number"] {
+    width: 80px;
+    height: 28px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 0 8px;
+    text-align: center;
+    font-size: 13px;
+}
+
+.percentual-symbol {
+    font-weight: bold;
+    color: #0073aa;
+    font-size: 14px;
+}
+
+.lojista-percentual .description {
+    font-size: 11px;
+    color: #999;
+    margin: 0;
+    margin-left: 5px;
+    font-style: italic;
 }
 
 .lojista-checkbox:last-child {
@@ -413,9 +508,15 @@ jQuery(document).ready(function($) {
         
         var productId = $('#import-product-id').val();
         var selectedLojistas = [];
+        var percentuais = {};
         
         $('input[name="lojistas[]"]:checked').each(function() {
-            selectedLojistas.push($(this).val());
+            var lojistaId = $(this).val();
+            selectedLojistas.push(lojistaId);
+            
+            // Capturar percentual específico do lojista
+            var percentual = $('input[name="percentual[' + lojistaId + ']"]').val();
+            percentuais[lojistaId] = parseFloat(percentual) || 0;
         });
         
         if (selectedLojistas.length === 0) {
@@ -430,6 +531,7 @@ jQuery(document).ready(function($) {
                 action: 'sincronizador_wc_import_product',
                 product_id: productId,
                 lojistas: selectedLojistas,
+                percentuais: percentuais,
                 nonce: sincronizador_wc_ajax.nonce
             },
             beforeSend: function() {

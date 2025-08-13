@@ -103,6 +103,28 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
                     <div class="opcao-descricao">
                         Preserva os preços da fábrica sem alterações
                     </div>
+                </div>
+
+                <div class="opcao-item percentual-section">
+                    <label for="percentual_acrescimo">
+                        💰 Percentual de Acréscimo no Preço
+                    </label>
+                    <div class="percentual-controls">
+                        <input type="number" 
+                               id="percentual_acrescimo" 
+                               class="regular-text" 
+                               value="0" 
+                               min="0" 
+                               max="1000" 
+                               step="0.1"
+                               placeholder="0"
+                               style="width: 120px;">
+                        <span class="percentual-symbol">%</span>
+                    </div>
+                    <div class="opcao-descricao">
+                        <strong>Exemplos:</strong> 50 = +50% no preço | 0 = sem alteração | 25.5 = +25,5%
+                        <br><small style="color: #666;">⚠️ Este percentual será aplicado automaticamente se "Manter Preços Originais" estiver <strong>desmarcado</strong></small>
+                    </div>
                 </div>                               
             </div>
         </div>

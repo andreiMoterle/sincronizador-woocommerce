@@ -427,7 +427,8 @@
             produtos_selecionados: produtosSelecionados,
             incluir_variacoes: $("#incluir_variacoes").is(":checked") ? 1 : 0,
             incluir_imagens: $("#incluir_imagens").is(":checked") ? 1 : 0,
-            manter_precos: $("#manter_precos").is(":checked") ? 1 : 0
+            manter_precos: $("#manter_precos").is(":checked") ? 1 : 0,
+            percentual_acrescimo: parseFloat($("#percentual_acrescimo").val()) || 0
             // pular_duplicados removido - será sempre TRUE no backend
         };
         

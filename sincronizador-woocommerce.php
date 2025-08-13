@@ -1279,6 +1279,7 @@ class Sincronizador_WooCommerce {
             'url' => esc_url_raw($data['url_loja']),
             'consumer_key' => sanitize_text_field($data['consumer_key']),
             'consumer_secret' => sanitize_text_field($data['consumer_secret']),
+            'percentual_acrescimo' => isset($data['percentual_acrescimo']) ? floatval($data['percentual_acrescimo']) : 0.0,
             'ativo' => isset($data['ativo']),
             'status' => isset($data['ativo']) ? 'ativo' : 'inativo',
             'ultima_sync' => 'Nunca',

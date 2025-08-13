@@ -191,6 +191,49 @@
     margin-top: 5px;
 }
 
+/* === Campo de Percentual === */
+.percentual-section {
+    background: #fff3cd !important;
+    border-color: #ffc107 !important;
+}
+
+.percentual-section label {
+    color: #856404;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.percentual-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.percentual-controls input[type="number"] {
+    width: 120px !important;
+    height: 32px;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    border: 2px solid #ffc107;
+    border-radius: 4px;
+    background: #fff;
+    color: #856404;
+}
+
+.percentual-controls input[type="number"]:focus {
+    border-color: #ff9500;
+    box-shadow: 0 0 5px rgba(255, 193, 7, 0.3);
+    outline: none;
+}
+
+.percentual-symbol {
+    font-size: 18px;
+    font-weight: bold;
+    color: #ffc107;
+}
+
 /* === Botões === */
 .botoes-acao {
     text-align: center;

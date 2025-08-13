@@ -6,6 +6,13 @@
 jQuery(document).ready(function($) {
     'use strict';
     
+    // Evitar execução múltipla
+    if (window.sincronizadorReportsInitialized) {
+        console.log('Sincronizador Reports já foi inicializado, pulando...');
+        return;
+    }
+    window.sincronizadorReportsInitialized = true;
+    
     // Verificar se a variável sincronizadorReports foi localizada
     if (typeof sincronizadorReports === 'undefined') {
         console.warn('sincronizadorReports não está definido. Usando valores padrão.');
@@ -45,45 +52,57 @@ jQuery(document).ready(function($) {
     function carregarLojistas() {
         const select = $('#filtro-lojista');
         
+        // Evitar carregamentos duplicados
+        if (select.data('loading')) {
+            console.log('Lojistas já estão sendo carregados, pulando...');
+            return Promise.resolve();
+        }
+        
         console.log('Carregando lojistas via AJAX...');
+        select.data('loading', true);
         
         // Limpar opções existentes (exceto a primeira)
         select.find('option:not(:first)').remove();
         
-        $.post(sincronizadorReports.ajaxurl, {
-            action: 'sincronizador_wc_get_lojistas_relatorios',
-            nonce: sincronizadorReports.nonce
-        }, function(response) {
-            console.log('Resposta lojistas:', response);
-            
-            if (response && response.success && response.data) {
-                // Usar Set para evitar duplicatas
-                const lojistasAdicionados = new Set();
+        return new Promise((resolve, reject) => {
+            $.post(sincronizadorReports.ajaxurl, {
+                action: 'sincronizador_wc_get_lojistas_relatorios',
+                nonce: sincronizadorReports.nonce
+            }, function(response) {
+                console.log('Resposta lojistas:', response);
                 
-                response.data.forEach(function(lojista) {
-                    // Verificar se o lojista já foi adicionado
-                    if (!lojistasAdicionados.has(lojista.id)) {
-                        select.append(`<option value="${lojista.id}">${lojista.nome}</option>`);
-                        lojistasAdicionados.add(lojista.id);
-                    }
+                if (response && response.success && response.data) {
+                    // Usar Set para evitar duplicatas
+                    const lojistasAdicionados = new Set();
+                    
+                    response.data.forEach(function(lojista) {
+                        // Verificar se o lojista já foi adicionado
+                        if (!lojistasAdicionados.has(lojista.id)) {
+                            select.append(`<option value="${lojista.id}">${lojista.nome}</option>`);
+                            lojistasAdicionados.add(lojista.id);
+                        }
+                    });
+                    console.log('Lojistas carregados com sucesso:', lojistasAdicionados.size);
+                    resolve();
+                } else {
+                    console.error('Erro ao carregar lojistas:', response);
+                    reject(response);
+                }
+            }).fail(function(xhr, status, error) {
+                console.error('Erro ao carregar lojistas:', {
+                    status: status,
+                    error: error,
+                    responseText: xhr.responseText
                 });
-                console.log('Lojistas carregados com sucesso:', lojistasAdicionados.size);
-            } else {
-                console.error('Erro ao carregar lojistas:', response);
-            }
-        }).fail(function(xhr, status, error) {
-            console.error('Erro ao carregar lojistas:', {
-                status: status,
-                error: error,
-                responseText: xhr.responseText
+                
+                // Adicionar dados de teste caso falhe
+                select.append('<option value="1">Loja Teste 1</option>');
+                select.append('<option value="2">Loja Teste 2</option>');
+                reject(error);
+            }).always(() => {
+                select.data('loading', false);
             });
-            
-            // Adicionar dados de teste caso falhe
-            select.append('<option value="1">Loja Teste 1</option>');
-            select.append('<option value="2">Loja Teste 2</option>');
         });
-        
-        return Promise.resolve();
     }
     
     /**
@@ -930,18 +949,18 @@ jQuery(document).ready(function($) {
         });
         
         console.log('=== INICIALIZAÇÃO CONCLUÍDA ===');
-    });
-    
-    // Verificações de dependências externas
-    // Verificar Chart.js
-    if (typeof Chart === 'undefined') {
-        console.warn('⚠️ Chart.js não encontrado. Carregando via CDN...');
         
-        const chartScript = document.createElement('script');
-        chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
-        chartScript.onload = function() {
-            console.log('✅ Chart.js carregado via CDN');
-        };
-        document.head.appendChild(chartScript);
-    }
+        // Verificações de dependências externas
+        // Verificar Chart.js
+        if (typeof Chart === 'undefined') {
+            console.warn('⚠️ Chart.js não encontrado. Carregando via CDN...');
+            
+            const chartScript = document.createElement('script');
+            chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+            chartScript.onload = function() {
+                console.log('✅ Chart.js carregado via CDN');
+            };
+            document.head.appendChild(chartScript);
+        }
+    });
 });

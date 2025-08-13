@@ -1269,12 +1269,6 @@ class Sincronizador_WooCommerce {
             'nonce' => wp_create_nonce('sincronizador_reports_nonce')
         ));
         
-        // Debug para verificar se está sendo localizado
-        echo '<script>console.log("sincronizadorReports localizado:", ' . json_encode(array(
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('sincronizador_reports_nonce')
-        )) . ');</script>';
-        
         // Incluir template da página de relatórios
         include plugin_dir_path(__FILE__) . 'admin/templates/reports-page.php';
     }

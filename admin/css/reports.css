@@ -45,6 +45,35 @@
     max-width: 100%;
 }
 
+/* === Mensagens Informativas === */
+.notice {
+    border-left: 4px solid #007cba;
+    padding: 10px 15px;
+    background-color: #f0f6fc;
+    margin: 10px 0;
+    border-radius: 0 4px 4px 0;
+}
+
+.notice.notice-info {
+    border-left-color: #007cba;
+    background-color: #f0f6fc;
+}
+
+.notice p {
+    margin: 5px 0;
+    font-size: 14px;
+}
+
+#filtro-info-vendas {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 15px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
 /* === Filtros === */
 .filtros-relatorio {
     display: flex;

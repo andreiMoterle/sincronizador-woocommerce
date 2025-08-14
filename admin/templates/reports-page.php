@@ -128,8 +128,18 @@ if (!defined('ABSPATH')) {
     <!-- Vendas Detalhadas -->
     <div class="card full-width">
         <h3>📋 Vendas Detalhadas</h3>
+        
+        <div id="vendas-detalhadas-info" class="notice notice-info" style="margin: 10px 0;">
+            <p>💡 <strong>Selecione um lojista específico</strong> nos filtros acima para visualizar as vendas detalhadas.</p>
+        </div>
+        
         <div class="vendas-detalhadas-container">
             <div class="vendas-actions">
+                <div id="filtro-info-vendas" style="display: none; margin-bottom: 10px; padding: 10px; background: #f0f0f1; border-left: 4px solid #007cba;">
+                    <strong>🏪 Exibindo vendas de:</strong> <span id="lojista-selecionado-nome">-</span><br>
+                    <strong>📅 Período:</strong> <span id="periodo-selecionado">-</span>
+                </div>
+                
                 <button type="button" class="button" id="btn-exportar-csv">
                     📥 Exportar CSV
                 </button>

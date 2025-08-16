@@ -106,20 +106,37 @@ class Sincronizador_WooCommerce {
             return;
         }
         
-        // CSS
+        // CSS principal
         wp_enqueue_style(
             'sincronizador-wc-admin-css',
             SINCRONIZADOR_WC_PLUGIN_URL . 'admin/css/admin-styles.css',
             array(),
-            SINCRONIZADOR_WC_VERSION . '-' . time() // Forçar reload adicionando timestamp
+            SINCRONIZADOR_WC_VERSION . '-' . time()
         );
         
-        // JavaScript
+        // CSS dos modais
+        wp_enqueue_style(
+            'sincronizador-wc-modal-css',
+            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/css/modal-styles.css',
+            array(),
+            SINCRONIZADOR_WC_VERSION . '-' . time()
+        );
+        
+        // JavaScript dos modais (deve ser carregado primeiro)
+        wp_enqueue_script(
+            'sincronizador-wc-modals-js',
+            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/modals.js',
+            array('jquery'),
+            SINCRONIZADOR_WC_VERSION . '-' . time(),
+            true
+        );
+        
+        // JavaScript principal (simplificado)
         wp_enqueue_script(
             'sincronizador-wc-admin-js',
             SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/admin-scripts.js',
-            array('jquery'),
-            SINCRONIZADOR_WC_VERSION . '-' . time(), // Forçar reload adicionando timestamp
+            array('jquery', 'sincronizador-wc-modals-js'),
+            SINCRONIZADOR_WC_VERSION . '-' . time(),
             true
         );
         
@@ -141,9 +158,10 @@ class Sincronizador_WooCommerce {
             )
         ));
         
-        error_log('SINCRONIZADOR WC DEBUG - Assets enfileirados com sucesso!');
-        error_log('SINCRONIZADOR WC DEBUG - JavaScript URL: ' . SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/admin-scripts.js');
-        error_log('SINCRONIZADOR WC DEBUG - CSS URL: ' . SINCRONIZADOR_WC_PLUGIN_URL . 'admin/css/admin-styles.css');
+        error_log('SINCRONIZADOR WC DEBUG - Assets refatorados enfileirados com sucesso!');
+        error_log('SINCRONIZADOR WC DEBUG - Modals JS: ' . SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/modals.js');
+        error_log('SINCRONIZADOR WC DEBUG - Admin JS: ' . SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/admin-scripts.js');
+        error_log('SINCRONIZADOR WC DEBUG - Modal CSS: ' . SINCRONIZADOR_WC_PLUGIN_URL . 'admin/css/modal-styles.css');
     }
 
 
@@ -1732,9 +1750,10 @@ class Sincronizador_WooCommerce {
         }
         
         // Inicializar admin
-        if (is_admin() && class_exists('Sincronizador_WC_Admin')) {
-            new Sincronizador_WC_Admin();
-        }
+        // Desabilitado temporariamente para evitar conflito com assets principais
+        // if (is_admin() && class_exists('Sincronizador_WC_Admin')) {
+        //     new Sincronizador_WC_Admin();
+        // }
         
         // Inicializar admin menu
         if (is_admin()) {

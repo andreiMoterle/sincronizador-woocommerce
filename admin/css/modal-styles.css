@@ -1,0 +1,459 @@
+/**
+ * Estilos para Modais - Sincronizador WooCommerce
+ * @version 1.0.0
+ */
+
+/* ==========================================================================
+   ESTILOS BASE DOS MODAIS
+   ========================================================================== */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 999999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.modal-overlay.show {
+    opacity: 1;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    transform: translateY(-50px);
+    transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.modal-overlay.show .modal-content {
+    transform: translateY(0);
+}
+
+.modal-header {
+    padding: 25px;
+    text-align: center;
+    position: relative;
+    color: white;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+}
+
+.modal-header p {
+    margin: 8px 0 0 0;
+    opacity: 0.9;
+    font-size: 16px;
+}
+
+.modal-close {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    border-radius: 50%;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.modal-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.modal-body {
+    padding: 30px;
+}
+
+/* ==========================================================================
+   MODAL DE PROGRESSO
+   ========================================================================== */
+
+.modal-progresso .modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.modal-progresso .modal-content {
+    max-width: 500px;
+}
+
+.progress-container {
+    margin-bottom: 25px;
+}
+
+.progress-bar {
+    background: #f0f0f0;
+    border-radius: 20px;
+    height: 12px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    background: linear-gradient(90deg, #4CAF50, #45a049);
+    height: 100%;
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 20px;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+}
+
+.progress-text {
+    color: #333;
+    font-weight: 500;
+}
+
+.progress-percentage {
+    background: #007cba;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.sync-status {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+}
+
+.spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007cba;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 15px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.sync-status p {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+}
+
+/* ==========================================================================
+   MODAL DE RELATÓRIO
+   ========================================================================== */
+
+.modal-relatorio .modal-header {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+}
+
+.relatorio-resumo {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.resumo-item {
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    border-left: 4px solid;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.resumo-item.success {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    border-left-color: #28a745;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.15);
+}
+
+.resumo-item.info {
+    background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+    border-left-color: #17a2b8;
+    box-shadow: 0 2px 8px rgba(23, 162, 184, 0.15);
+}
+
+.resumo-item.warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border-left-color: #ffc107;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.15);
+}
+
+.resumo-item.error {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    border-left-color: #dc3545;
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.15);
+}
+
+.resumo-numero {
+    display: block;
+    font-size: 28px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.resumo-item.success .resumo-numero {
+    color: #155724;
+}
+
+.resumo-item.info .resumo-numero {
+    color: #0c5460;
+}
+
+.resumo-item.warning .resumo-numero {
+    color: #856404;
+}
+
+.resumo-item.error .resumo-numero {
+    color: #721c24;
+}
+
+.resumo-label {
+    font-size: 12px;
+    margin-top: 5px;
+    font-weight: 500;
+}
+
+.resumo-item.success .resumo-label {
+    color: #155724;
+}
+
+.resumo-item.info .resumo-label {
+    color: #0c5460;
+}
+
+.resumo-item.warning .resumo-label {
+    color: #856404;
+}
+
+.resumo-item.error .resumo-label {
+    color: #721c24;
+}
+
+.tempo-execucao {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    margin-bottom: 20px;
+    border: 1px solid #e9ecef;
+}
+
+.tempo-execucao span:first-child {
+    color: #666;
+    font-weight: 500;
+}
+
+.tempo-execucao span:last-child {
+    color: #007cba;
+    font-weight: bold;
+}
+
+.relatorio-detalhes {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    margin-bottom: 20px;
+}
+
+.relatorio-detalhes h4 {
+    margin: 0 0 15px 0;
+    color: #495057;
+    font-size: 16px;
+}
+
+.relatorio-detalhes div {
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* ==========================================================================
+   MODAL DE ERRO
+   ========================================================================== */
+
+.modal-erro .modal-header {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+}
+
+.modal-erro .modal-content {
+    max-width: 500px;
+}
+
+.modal-erro .modal-body {
+    text-align: center;
+}
+
+.erro-message {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    color: #721c24;
+}
+
+/* ==========================================================================
+   BOTÕES DOS MODAIS
+   ========================================================================== */
+
+.modal-btn {
+    border: none;
+    padding: 12px 30px;
+    border-radius: 25px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    font-size: 14px;
+}
+
+.modal-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.modal-btn.primary {
+    background: linear-gradient(135deg, #007cba 0%, #005a87 100%);
+}
+
+.modal-btn.success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+}
+
+.modal-btn.danger {
+    background: #dc3545;
+}
+
+/* ==========================================================================
+   ANIMAÇÕES
+   ========================================================================== */
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+.modal-slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+.modal-fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+.modal-fade-out {
+    animation: fadeOut 0.3s ease-out;
+}
+
+/* ==========================================================================
+   RESPONSIVIDADE
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .modal-content {
+        width: 95%;
+        margin: 20px;
+        max-height: 90vh;
+    }
+    
+    .modal-header {
+        padding: 20px;
+    }
+    
+    .modal-body {
+        padding: 20px;
+    }
+    
+    .relatorio-resumo {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    
+    .resumo-item {
+        padding: 15px;
+    }
+    
+    .resumo-numero {
+        font-size: 24px;
+    }
+    
+    .modal-header h3 {
+        font-size: 18px;
+    }
+}
+
+@media (max-width: 480px) {
+    .relatorio-resumo {
+        grid-template-columns: 1fr;
+    }
+    
+    .modal-content {
+        width: 98%;
+        margin: 10px;
+    }
+    
+    .modal-header {
+        padding: 15px;
+    }
+    
+    .modal-body {
+        padding: 15px;
+    }
+}

@@ -23,7 +23,7 @@ class Sincronizador_WC_Assets {
             return;
         }
         
-        // CSS
+        // CSS principal
         wp_enqueue_style(
             'sincronizador-wc-admin-css',
             SINCRONIZADOR_WC_PLUGIN_URL . 'admin/css/admin-styles.css',
@@ -31,11 +31,28 @@ class Sincronizador_WC_Assets {
             SINCRONIZADOR_WC_VERSION
         );
         
-        // JavaScript
+        // CSS dos modais
+        wp_enqueue_style(
+            'sincronizador-wc-modal-css',
+            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/css/modal-styles.css',
+            array(),
+            SINCRONIZADOR_WC_VERSION
+        );
+        
+        // JavaScript dos modais (deve ser carregado primeiro)
+        wp_enqueue_script(
+            'sincronizador-wc-modals-js',
+            SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/modals.js',
+            array('jquery'),
+            SINCRONIZADOR_WC_VERSION,
+            true
+        );
+        
+        // JavaScript principal
         wp_enqueue_script(
             'sincronizador-wc-admin-js',
             SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/admin-scripts.js',
-            array('jquery'),
+            array('jquery', 'sincronizador-wc-modals-js'),
             SINCRONIZADOR_WC_VERSION,
             true
         );

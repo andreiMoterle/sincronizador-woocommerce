@@ -1,19 +1,26 @@
 /**
  * JavaScript da Página de Relatórios de Vendas
- * @version 2.2.0 - Otimizado e sem carregamentos múltiplos
+ * @version 2.3.0 - Versão simplificada e otimizada
  */
 
-// Prevenir execução múltipla global
-if (window.sincronizadorReportsLoaded) {
-    return;
-} else {
+// Estrutura mais simples para evitar erros de sintaxe
+jQuery(document).ready(function($) {
+    'use strict';
+    
+    console.log('🚀 === INICIALIZANDO PÁGINA DE RELATÓRIOS ===');
+    console.log('📱 jQuery carregado, versão:', $.fn.jquery);
+    
+    // Prevenir execução múltipla
+    if (window.sincronizadorReportsLoaded) {
+        console.log('🚫 Reports já carregado, ignorando execução dupla');
+        return;
+    }
+    
     window.sincronizadorReportsLoaded = true;
-
-    jQuery(document).ready(function($) {
-        'use strict';
         
         // Verificar se a variável sincronizadorReports foi localizada
         if (typeof sincronizadorReports === 'undefined') {
+            console.log('⚠️ sincronizadorReports não definido, usando fallback');
             const currentUrl = window.location.href;
             const baseUrl = currentUrl.includes('wp-admin') 
                 ? currentUrl.split('wp-admin')[0] + 'wp-admin/admin-ajax.php'
@@ -23,6 +30,8 @@ if (window.sincronizadorReportsLoaded) {
                 ajaxurl: baseUrl,
                 nonce: ''
             };
+        } else {
+            console.log('🔧 sincronizadorReports disponível:', sincronizadorReports);
         }
         
         // Variáveis globais
@@ -41,21 +50,55 @@ if (window.sincronizadorReportsLoaded) {
         init();
     
         function init() {
+            console.log('🚀 === INICIALIZANDO PÁGINA DE RELATÓRIOS ===');
+            
             // Inicialmente ocultar a seção de vendas detalhadas
             $('.card:has(#vendas-detalhadas-tbody)').hide();
             
-            carregarLojistas();
             configurarEventos();
             
-            // Carregar dados iniciais (sem vendas detalhadas)
-            mostrarLoading(true);
-            Promise.all([
-                carregarResumoVendas(),
-                carregarGraficoVendasLojista(),
-                carregarProdutosMaisVendidos()
-            ]).finally(() => {
+            // Carregamento sequencial otimizado
+            carregarDadosSequencial();
+        }
+        
+        /**
+         * Carregamento sequencial otimizado para melhor performance
+         */
+        async function carregarDadosSequencial() {
+            try {
+                console.log('📊 Iniciando carregamento sequencial otimizado...');
+                
+                // Mostrar loading apenas para o primeiro carregamento
+                if (!dadosCarregados) {
+                    mostrarLoading(true, '🔄 Carregando lojistas...');
+                }
+                
+                // 1. Primeiro carregar lojistas (mais rápido, dados locais)
+                console.log('1️⃣ Carregando lojistas...');
+                await carregarLojistas();
+                
+                // 2. Carregar resumo de vendas (dados mais importantes)
+                mostrarLoading(true, '💰 Carregando resumo de vendas...');
+                console.log('2️⃣ Carregando resumo de vendas...');
+                await carregarResumoVendas();
+                
+                // 3. Carregar dados visuais em paralelo (menos críticos)
+                mostrarLoading(true, '📊 Carregando gráficos e produtos...');
+                console.log('3️⃣ Carregando dados visuais...');
+                await Promise.all([
+                    carregarGraficoVendasLojista(),
+                    carregarProdutosMaisVendidos()
+                ]);
+                
+                dadosCarregados = true;
+                console.log('✅ Carregamento sequencial concluído!');
+                
+            } catch (error) {
+                console.error('❌ Erro no carregamento sequencial:', error);
+                alert('⚠️ Erro ao carregar dados dos relatórios. Verifique sua conexão e tente novamente.');
+            } finally {
                 mostrarLoading(false);
-            });
+            }
         }
     
         /**
@@ -135,6 +178,7 @@ if (window.sincronizadorReportsLoaded) {
             // Aplicar filtros principais
             $('#btn-aplicar-filtros').on('click', aplicarFiltros);
             $('#btn-limpar-filtros').on('click', limparFiltros);
+            $('#btn-limpar-cache').on('click', limparCacheRelatorios);
             
             // Produtos mais vendidos
             $('#btn-atualizar-produtos').on('click', carregarProdutosMaisVendidos);
@@ -182,43 +226,58 @@ if (window.sincronizadorReportsLoaded) {
         /**
          * Aplicar filtros e carregar dados
          */
-        function aplicarFiltros() {
-            mostrarLoading(true);
-            
-            // Coletar filtros
-            filtrosAtuais = {
-                lojista: $('#filtro-lojista').val(),
-                periodo: $('#filtro-periodo').val(),
-                data_inicio: $('#data-inicio').val(),
-                data_fim: $('#data-fim').val()
-            };
-            
-            // Resetar paginação
-            currentPage = 1;
-            
-            // Controlar visibilidade da seção de vendas detalhadas
-            const lojistaSelecionado = filtrosAtuais.lojista;
-            if (lojistaSelecionado && lojistaSelecionado !== '') {
-                $('.card:has(#vendas-detalhadas-tbody)').show();
-            } else {
-                $('.card:has(#vendas-detalhadas-tbody)').hide();
-            }
-            
-            // Carregar dados básicos sempre
-            const promises = [
-                carregarResumoVendas(),
-                carregarGraficoVendasLojista(),
-                carregarProdutosMaisVendidos()
-            ];
-            
-            // Só carregar vendas detalhadas se um lojista específico for selecionado
-            if (lojistaSelecionado && lojistaSelecionado !== '') {
-                promises.push(carregarVendasDetalhadas());
-            }
-            
-            Promise.all(promises).finally(() => {
+        async function aplicarFiltros() {
+            try {
+                mostrarLoading(true, '🔄 Aplicando filtros...');
+                
+                // Coletar filtros
+                filtrosAtuais = {
+                    lojista: $('#filtro-lojista').val(),
+                    periodo: $('#filtro-periodo').val(),
+                    data_inicio: $('#data-inicio').val(),
+                    data_fim: $('#data-fim').val()
+                };
+                
+                console.log('🔄 Aplicando filtros:', filtrosAtuais);
+                
+                // Resetar paginação
+                currentPage = 1;
+                
+                // Controlar visibilidade da seção de vendas detalhadas
+                const lojistaSelecionado = filtrosAtuais.lojista;
+                if (lojistaSelecionado && lojistaSelecionado !== '') {
+                    $('.card:has(#vendas-detalhadas-tbody)').show();
+                } else {
+                    $('.card:has(#vendas-detalhadas-tbody)').hide();
+                }
+                
+                // Carregamento sequencial otimizado
+                mostrarLoading(true, '💰 Atualizando resumo...');
+                console.log('1️⃣ Carregando resumo...');
+                await carregarResumoVendas();
+                
+                mostrarLoading(true, '📊 Atualizando gráficos...');
+                console.log('2️⃣ Carregando dados visuais...');
+                await Promise.all([
+                    carregarGraficoVendasLojista(),
+                    carregarProdutosMaisVendidos()
+                ]);
+                
+                // Só carregar vendas detalhadas se um lojista específico for selecionado
+                if (lojistaSelecionado && lojistaSelecionado !== '') {
+                    mostrarLoading(true, '📋 Carregando vendas detalhadas...');
+                    console.log('3️⃣ Carregando vendas detalhadas...');
+                    await carregarVendasDetalhadas();
+                }
+                
+                console.log('✅ Filtros aplicados com sucesso!');
+                
+            } catch (error) {
+                console.error('❌ Erro ao aplicar filtros:', error);
+                alert('⚠️ Erro ao aplicar filtros. Tente novamente.');
+            } finally {
                 mostrarLoading(false);
-            });
+            }
         }
     
         /**
@@ -751,13 +810,14 @@ if (window.sincronizadorReportsLoaded) {
         }
     
         /**
-         * Mostrar/ocultar loading
+         * Mostrar/ocultar loading com texto personalizado
          */
-        function mostrarLoading(mostrar) {
+        function mostrarLoading(mostrar, texto = 'Carregando...') {
             if (mostrar) {
-                $('#loading-overlay').show();
+                $('#loading-overlay .loading-content p').text(texto);
+                $('#loading-overlay').fadeIn(200);
             } else {
-                $('#loading-overlay').hide();
+                $('#loading-overlay').fadeOut(200);
             }
         }
     
@@ -825,11 +885,56 @@ if (window.sincronizadorReportsLoaded) {
             setTimeout(() => mostrarLoading(false), 2000);
         }
         
+        /**
+         * Limpar cache dos relatórios
+         */
+        function limparCacheRelatorios() {
+            if (!confirm('🔄 Tem certeza que deseja limpar o cache dos relatórios?\n\nIsso forçará a atualização de todos os dados na próxima consulta.')) {
+                return;
+            }
+            
+            const $btn = $('#btn-limpar-cache');
+            const textoOriginal = $btn.text();
+            
+            $btn.prop('disabled', true).text('🔄 Limpando...');
+            
+            $.ajax({
+                url: sincronizadorReports.ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'sincronizador_wc_limpar_cache_relatorios',
+                    nonce: sincronizadorReports.nonce || 'fallback'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        alert('✅ ' + response.data.message);
+                        
+                        // Recarregar dados automaticamente
+                        cacheRequisicoes = {}; // Limpar cache local também
+                        aplicarFiltros();
+                    } else {
+                        alert('❌ Erro ao limpar cache: ' + (response.data.message || 'Erro desconhecido'));
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Erro ao limpar cache:', error);
+                    alert('❌ Erro de conexão ao limpar cache. Verifique o console.');
+                },
+                complete: function() {
+                    $btn.prop('disabled', false).text(textoOriginal);
+                }
+            });
+        }
+        
         // Verificar Chart.js na inicialização
         if (typeof Chart === 'undefined') {
+            console.log('📊 Carregando Chart.js...');
             const chartScript = document.createElement('script');
             chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
             document.head.appendChild(chartScript);
+        } else {
+            console.log('✅ Chart.js disponível, versão:', Chart.version);
         }
-    });
-}
+        
+        console.log('🎯 === INICIALIZAÇÃO CONCLUÍDA ===');
+}); // Final do jQuery ready

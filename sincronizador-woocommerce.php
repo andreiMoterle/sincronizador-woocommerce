@@ -1701,6 +1701,7 @@ class Sincronizador_WooCommerce {
         add_action('wp_ajax_sincronizador_wc_get_produtos_mais_vendidos', array($this, 'ajax_get_produtos_mais_vendidos'));
         add_action('wp_ajax_sincronizador_wc_get_vendas_detalhadas', array($this, 'ajax_get_vendas_detalhadas'));
         add_action('wp_ajax_sincronizador_wc_export_vendas', array($this, 'ajax_export_vendas'));
+        add_action('wp_ajax_sincronizador_wc_limpar_cache_relatorios', array($this, 'ajax_limpar_cache_relatorios'));
         
         // Inicializar classes se existirem
         add_action('plugins_loaded', array($this, 'init_classes'));
@@ -3576,7 +3577,70 @@ class Sincronizador_WooCommerce {
     }
     
     /**
-     * AJAX: Obter resumo de vendas
+     * Gerar chave de cache baseada nos parâmetros
+     */
+    private function gerar_chave_cache($funcao, $parametros = array()) {
+        $key_base = 'sincronizador_wc_' . $funcao;
+        
+        if (!empty($parametros)) {
+            $key_base .= '_' . md5(serialize($parametros));
+        }
+        
+        return $key_base;
+    }
+    
+    /**
+     * Obter dados do cache ou executar função
+     */
+    private function get_cache_ou_executar($chave_cache, $callback, $expiracao = 300) {
+        $tempo_inicio = microtime(true);
+        
+        // Verificar se existe no cache
+        $dados_cache = get_transient($chave_cache);
+        
+        if ($dados_cache !== false) {
+            $tempo_fim = microtime(true);
+            $tempo_execucao = round(($tempo_fim - $tempo_inicio) * 1000, 2);
+            error_log("CACHE HIT: {$chave_cache} - Tempo: {$tempo_execucao}ms");
+            return $dados_cache;
+        }
+        
+        // Se não existe no cache, executar função
+        error_log("CACHE MISS: {$chave_cache} - Executando consulta...");
+        $dados = call_user_func($callback);
+        
+        // Salvar no cache com tempo otimizado (10 minutos para primeira consulta)
+        $tempo_cache_otimizado = max($expiracao, 600); // Mínimo 10 minutos
+        if ($dados !== false) {
+            set_transient($chave_cache, $dados, $tempo_cache_otimizado);
+            $tempo_fim = microtime(true);
+            $tempo_execucao = round(($tempo_fim - $tempo_inicio) * 1000, 2);
+            error_log("CACHE SET: {$chave_cache} - Tempo: {$tempo_execucao}ms - Cache: {$tempo_cache_otimizado}s");
+        }
+        
+        return $dados;
+    }
+    
+    /**
+     * Limpar cache específico ou todo cache dos relatórios
+     */
+    public function limpar_cache_relatorios($prefixo = 'sincronizador_wc_') {
+        global $wpdb;
+        
+        // Limpar transients que começam com o prefixo
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+                '_transient_' . $prefixo . '%',
+                '_transient_timeout_' . $prefixo . '%'
+            )
+        );
+        
+        error_log("DEBUG: Cache de relatórios limpo");
+    }
+
+    /**
+     * AJAX: Obter resumo de vendas (com cache)
      */
     public function ajax_get_resumo_vendas() {
         check_ajax_referer('sincronizador_reports_nonce', 'nonce');
@@ -3588,6 +3652,24 @@ class Sincronizador_WooCommerce {
             $filtros = json_decode($filtros, true);
         }
         
+        // Gerar chave de cache baseada nos filtros
+        $chave_cache = $this->gerar_chave_cache('resumo_vendas', $filtros);
+        
+        // Callback para buscar dados
+        $callback = function() use ($filtros) {
+            return $this->buscar_resumo_vendas_sem_cache($filtros);
+        };
+        
+        // Obter dados do cache ou executar busca (cache de 15 minutos)
+        $resumo = $this->get_cache_ou_executar($chave_cache, $callback, 900);
+        
+        wp_send_json_success($resumo);
+    }
+    
+    /**
+     * Buscar resumo de vendas sem cache (função auxiliar)
+     */
+    private function buscar_resumo_vendas_sem_cache($filtros) {
         $periodo = isset($filtros['periodo']) ? intval($filtros['periodo']) : 30;
         $lojista_filtro = isset($filtros['lojista']) ? $filtros['lojista'] : '';
         
@@ -3647,20 +3729,16 @@ class Sincronizador_WooCommerce {
             }
         }
         
-        $resumo = array(
+        return array(
             'total_vendas' => $total_vendas,
             'total_pedidos' => $total_pedidos,
             'produtos_vendidos' => $produtos_vendidos,
             'lojistas_ativos' => count($lojistas_ativos)
         );
-        
-        error_log("DEBUG: Resumo calculado: " . print_r($resumo, true));
-        
-        wp_send_json_success($resumo);
     }
-    
+
     /**
-     * AJAX: Obter vendas por lojista
+     * AJAX: Obter vendas por lojista (com cache)
      */
     public function ajax_get_vendas_por_lojista() {
         check_ajax_referer('sincronizador_reports_nonce', 'nonce');
@@ -3672,6 +3750,24 @@ class Sincronizador_WooCommerce {
             $filtros = json_decode($filtros, true);
         }
         
+        // Gerar chave de cache baseada nos filtros
+        $chave_cache = $this->gerar_chave_cache('vendas_por_lojista', $filtros);
+        
+        // Callback para buscar dados
+        $callback = function() use ($filtros) {
+            return $this->buscar_vendas_por_lojista_sem_cache($filtros);
+        };
+        
+        // Obter dados do cache ou executar busca (cache de 15 minutos)
+        $dados_grafico = $this->get_cache_ou_executar($chave_cache, $callback, 900);
+        
+        wp_send_json_success($dados_grafico);
+    }
+    
+    /**
+     * Buscar vendas por lojista sem cache (função auxiliar)
+     */
+    private function buscar_vendas_por_lojista_sem_cache($filtros) {
         $periodo = isset($filtros['periodo']) ? intval($filtros['periodo']) : 30;
         
         // Calcular data de início baseada no período
@@ -3713,11 +3809,11 @@ class Sincronizador_WooCommerce {
         
         error_log("DEBUG: Dados do gráfico por lojista: " . print_r($dados_grafico, true));
         
-        wp_send_json_success($dados_grafico);
+        return $dados_grafico;
     }
     
     /**
-     * AJAX: Obter produtos mais vendidos
+     * AJAX: Obter produtos mais vendidos (com cache)
      */
     public function ajax_get_produtos_mais_vendidos() {
         check_ajax_referer('sincronizador_reports_nonce', 'nonce');
@@ -3729,6 +3825,24 @@ class Sincronizador_WooCommerce {
             $filtros = json_decode($filtros, true);
         }
         
+        // Gerar chave de cache baseada nos filtros
+        $chave_cache = $this->gerar_chave_cache('produtos_mais_vendidos', $filtros);
+        
+        // Callback para buscar dados
+        $callback = function() use ($filtros) {
+            return $this->buscar_produtos_mais_vendidos_sem_cache($filtros);
+        };
+        
+        // Obter dados do cache ou executar busca (cache de 20 minutos)
+        $produtos_mais_vendidos = $this->get_cache_ou_executar($chave_cache, $callback, 1200);
+        
+        wp_send_json_success($produtos_mais_vendidos);
+    }
+    
+    /**
+     * Buscar produtos mais vendidos sem cache (função auxiliar)
+     */
+    private function buscar_produtos_mais_vendidos_sem_cache($filtros) {
         $lojista_filtro = isset($filtros['lojista']) ? $filtros['lojista'] : '';
         $periodo = isset($filtros['periodo']) ? intval($filtros['periodo']) : 30;
         
@@ -3802,7 +3916,7 @@ class Sincronizador_WooCommerce {
         
         error_log("DEBUG: Produtos mais vendidos encontrados: " . count($produtos_mais_vendidos));
         
-        wp_send_json_success($produtos_mais_vendidos);
+        return $produtos_mais_vendidos;
     }
     
     /**
@@ -3923,6 +4037,9 @@ class Sincronizador_WooCommerce {
     /**
      * AJAX: Obter vendas detalhadas
      */
+    /**
+     * AJAX: Obter vendas detalhadas (com cache)
+     */
     public function ajax_get_vendas_detalhadas() {
         check_ajax_referer('sincronizador_reports_nonce', 'nonce');
         
@@ -3942,6 +4059,35 @@ class Sincronizador_WooCommerce {
         if (empty($lojista_filtro) || $lojista_filtro === '' || $lojista_filtro === 'todos') {
             wp_send_json_error(array('message' => 'Por favor, selecione um lojista específico para visualizar as vendas detalhadas.'));
         }
+        
+        // Incluir página e per_page nos filtros para cache
+        $filtros_cache = $filtros;
+        $filtros_cache['page'] = $page;
+        $filtros_cache['per_page'] = $per_page;
+        
+        // Gerar chave de cache baseada nos filtros incluindo paginação
+        $chave_cache = $this->gerar_chave_cache('vendas_detalhadas', $filtros_cache);
+        
+        // Callback para buscar dados
+        $callback = function() use ($filtros, $page, $per_page, $lojista_filtro) {
+            return $this->buscar_vendas_detalhadas_sem_cache($filtros, $page, $per_page, $lojista_filtro);
+        };
+        
+        // Obter dados do cache ou executar busca (cache de 15 minutos)
+        $response = $this->get_cache_ou_executar($chave_cache, $callback, 900);
+        
+        if (isset($response['error'])) {
+            wp_send_json_error($response);
+        }
+        
+        wp_send_json_success($response);
+    }
+    
+    /**
+     * Buscar vendas detalhadas sem cache (função auxiliar)
+     */
+    private function buscar_vendas_detalhadas_sem_cache($filtros, $page, $per_page, $lojista_filtro) {
+        $periodo = isset($filtros['periodo']) ? intval($filtros['periodo']) : 30;
         
         // Calcular data de início baseada no período
         if (isset($filtros['data_inicio']) && isset($filtros['data_fim']) && 
@@ -3967,14 +4113,14 @@ class Sincronizador_WooCommerce {
         }
         
         if (!$lojista_data) {
-            wp_send_json_error(array('message' => 'Lojista não encontrado.'));
+            return array('error' => true, 'message' => 'Lojista não encontrado.');
         }
         
         // Buscar vendas detalhadas do lojista via API
         $vendas_result = $this->buscar_vendas_detalhadas_lojista($lojista_data, $data_inicio, $data_fim);
         
         if (!$vendas_result['success']) {
-            wp_send_json_error(array('message' => 'Erro ao buscar vendas: ' . $vendas_result['message']));
+            return array('error' => true, 'message' => 'Erro ao buscar vendas: ' . $vendas_result['message']);
         }
         
         $todos_pedidos = $vendas_result['data']['items'];
@@ -4068,7 +4214,7 @@ class Sincronizador_WooCommerce {
         
         error_log("DEBUG: Vendas detalhadas encontradas para lojista {$lojista_data['nome']}: " . count($vendas) . " de " . $total_pedidos);
         
-        wp_send_json_success($response);
+        return $response;
     }
     
     /**
@@ -4218,6 +4364,34 @@ class Sincronizador_WooCommerce {
         }
         
         wp_send_json_error('Formato não suportado');
+    }
+    
+    /**
+     * AJAX: Limpar cache dos relatórios
+     */
+    public function ajax_limpar_cache_relatorios() {
+        check_ajax_referer('sincronizador_reports_nonce', 'nonce');
+        
+        try {
+            $cache_limpo = $this->limpar_cache_relatorios();
+            
+            if ($cache_limpo) {
+                wp_send_json_success(array(
+                    'message' => 'Cache dos relatórios limpo com sucesso! Os dados serão atualizados na próxima consulta.',
+                    'timestamp' => current_time('mysql')
+                ));
+            } else {
+                wp_send_json_success(array(
+                    'message' => 'Nenhum cache encontrado para limpar.',
+                    'timestamp' => current_time('mysql')
+                ));
+            }
+        } catch (Exception $e) {
+            error_log("Erro ao limpar cache dos relatórios: " . $e->getMessage());
+            wp_send_json_error(array(
+                'message' => 'Erro ao limpar cache: ' . $e->getMessage()
+            ));
+        }
     }
 }
 

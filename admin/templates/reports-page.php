@@ -46,6 +46,9 @@ if (!defined('ABSPATH')) {
                 <button type="button" class="button" id="btn-limpar-filtros">
                     🧹 Limpar
                 </button>
+                <button type="button" class="button button-secondary" id="btn-limpar-cache" title="Limpar cache para atualizar dados">
+                    🔄 Atualizar Cache
+                </button>
             </div>
         </div>
     </div>

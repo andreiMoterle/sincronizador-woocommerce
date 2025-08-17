@@ -8,6 +8,12 @@
  * 3. Fornece endpoint público (sem autenticação) para consultar vendas
  */
 
+// Prevenir carregamento múltiplo
+if (defined('SINCRONIZADOR_VENDAS_LOADED')) {
+    return;
+}
+define('SINCRONIZADOR_VENDAS_LOADED', true);
+
 // ========================================
 // 1. CRIAR TABELA DE VENDAS
 // ========================================
@@ -320,4 +326,7 @@ add_action('admin_notices', function() {
     }
 });
 
-error_log("SINCRONIZADOR VENDAS - Sistema carregado com sucesso!");
+// Log de sistema carregado apenas em debug mode
+if (defined('WP_DEBUG') && WP_DEBUG) {
+    error_log("SINCRONIZADOR VENDAS - Sistema carregado com sucesso!");
+}

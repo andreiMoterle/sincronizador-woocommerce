@@ -68,9 +68,6 @@ class Sincronizador_WooCommerce {
     }
     
     public function enqueue_admin_assets($hook) {
-        // Debug: verificar hook atual
-        error_log('SINCRONIZADOR WC DEBUG - Hook atual: ' . $hook);
-        
         // Lista de hooks válidos para carregar assets
         $valid_hooks = array(
             'toplevel_page_sincronizador-wc',
@@ -95,15 +92,11 @@ class Sincronizador_WooCommerce {
         }
         
         if (!$should_load) {
-            error_log('SINCRONIZADOR WC DEBUG - Hook não corresponde, assets não carregados. Hook: ' . $hook);
             return;
         }
         
-        error_log('SINCRONIZADOR WC DEBUG - Carregando assets para hook: ' . $hook);
-        
         // Verificar se os assets já foram enfileirados para evitar duplicação
         if (wp_script_is('sincronizador-wc-admin-js', 'enqueued')) {
-            error_log('SINCRONIZADOR WC DEBUG - Scripts já enfileirados, pulando...');
             return;
         }
         
@@ -159,10 +152,6 @@ class Sincronizador_WooCommerce {
             )
         ));
         
-        error_log('SINCRONIZADOR WC DEBUG - Assets refatorados enfileirados com sucesso!');
-        error_log('SINCRONIZADOR WC DEBUG - Modals JS: ' . SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/modals.js');
-        error_log('SINCRONIZADOR WC DEBUG - Admin JS: ' . SINCRONIZADOR_WC_PLUGIN_URL . 'admin/js/admin-scripts.js');
-        error_log('SINCRONIZADOR WC DEBUG - Modal CSS: ' . SINCRONIZADOR_WC_PLUGIN_URL . 'admin/css/modal-styles.css');
     }
 
 
@@ -1617,13 +1606,43 @@ class Sincronizador_WooCommerce {
         return true;
     }
     
-    private function includes() {
-        error_log('DEBUG: includes() foi chamado');
-        
-        // Classes principais
-        if (file_exists(SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php')) {
+    /**
+     * Helper para garantir que a classe Database seja carregada apenas uma vez
+     */
+    private function ensure_database_loaded() {
+        if (!class_exists('Sincronizador_WC_Database')) {
             require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php';
         }
+    }
+
+    /**
+     * Cache estático para verificação de tabelas
+     */
+    private static $tables_checked = false;
+
+    /**
+     * Verificar se a tabela de cache existe (com cache estático)
+     */
+    private function check_cache_table_exists() {
+        if (!self::$tables_checked) {
+            global $wpdb;
+            $table_cache = $wpdb->prefix . 'sincronizador_produtos_cache';
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_cache'");
+            
+            if (!$table_exists) {
+                $this->ensure_database_loaded();
+                Sincronizador_WC_Database::create_tables();
+            }
+            
+            self::$tables_checked = true;
+        }
+        
+        return true;
+    }
+
+    private function includes() {
+        // Classes principais
+        $this->ensure_database_loaded();
         
         if (file_exists(SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-product-importer.php')) {
             require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-product-importer.php';
@@ -1742,15 +1761,8 @@ class Sincronizador_WooCommerce {
     public function init_classes() {
         // Inicializar database e criar tabelas se necessário
         if (class_exists('Sincronizador_WC_Database')) {
-            // Verificar se a tabela de cache existe, se não criar todas as tabelas
-            global $wpdb;
-            $table_cache = $wpdb->prefix . 'sincronizador_produtos_cache';
-            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_cache'");
-            
-            if (!$table_exists) {
-                Sincronizador_WC_Database::create_tables();
-            }
-            
+            // Verificar tabelas uma única vez
+            $this->check_cache_table_exists();
             new Sincronizador_WC_Database();
         }
         
@@ -1905,7 +1917,7 @@ class Sincronizador_WooCommerce {
      * Executar limpeza automática de cache expirado
      */
     public function cleanup_expired_cache() {
-        require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php';
+        $this->ensure_database_loaded();
         $rows_deleted = Sincronizador_WC_Database::cleanup_expired_cache();
     }
     
@@ -2514,19 +2526,11 @@ class Sincronizador_WooCommerce {
         
         // Limpar cache do banco de dados
         try {
-            require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php';
+            $this->ensure_database_loaded();
+            $this->check_cache_table_exists();
             
-            // Verificar se a tabela existe
-            global $wpdb;
-            $table_cache = $wpdb->prefix . 'sincronizador_produtos_cache';
-            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_cache'");
-            
-            if ($table_exists) {
-                $rows_deleted = Sincronizador_WC_Database::clear_produtos_cache($lojista_id);
-                wp_send_json_success("Cache limpo com sucesso. {$rows_deleted} registros removidos do cache do banco.");
-            } else {
-                wp_send_json_success("Cache limpo com sucesso.");
-            }
+            $rows_deleted = Sincronizador_WC_Database::clear_produtos_cache($lojista_id);
+            wp_send_json_success("Cache limpo com sucesso. {$rows_deleted} registros removidos do cache do banco.");
         } catch (Exception $e) {
             wp_send_json_success("Cache limpo com sucesso.");
         }
@@ -2786,21 +2790,13 @@ class Sincronizador_WooCommerce {
         // Tentar buscar do cache do banco primeiro
         if (!isset($_POST['force_refresh'])) {
             try {
-                require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php';
+                $this->ensure_database_loaded();
+                $this->check_cache_table_exists();
                 
-                // Verificar se a tabela existe antes de tentar usar
-                global $wpdb;
-                $table_cache = $wpdb->prefix . 'sincronizador_produtos_cache';
-                $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_cache'");
+                $produtos_cached = Sincronizador_WC_Database::get_produtos_cache($lojista_id);
                 
-                if ($table_exists) {
-                    $produtos_cached = Sincronizador_WC_Database::get_produtos_cache($lojista_id);
-                    
-                    if ($produtos_cached !== false) {
-                        return $produtos_cached;
-                    }
-                } else {
-                    Sincronizador_WC_Database::create_tables();
+                if ($produtos_cached !== false) {
+                    return $produtos_cached;
                 }
             } catch (Exception $e) {
                 // Continuar sem cache do banco
@@ -2884,16 +2880,10 @@ class Sincronizador_WooCommerce {
         // Salvar no cache do banco
         if (!empty($produtos_sincronizados)) {
             try {
-                require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php';
+                $this->ensure_database_loaded();
+                $this->check_cache_table_exists();
                 
-                // Verificar se a tabela existe antes de tentar salvar
-                global $wpdb;
-                $table_cache = $wpdb->prefix . 'sincronizador_produtos_cache';
-                $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_cache'");
-                
-                if ($table_exists) {
-                    Sincronizador_WC_Database::save_produtos_cache($lojista_id, $lojista_url, $produtos_sincronizados);
-                }
+                Sincronizador_WC_Database::save_produtos_cache($lojista_id, $lojista_url, $produtos_sincronizados);
             } catch (Exception $e) {
                 // Continuar sem salvar no cache
             }
@@ -3711,9 +3701,6 @@ class Sincronizador_WooCommerce {
             return isset($lojista['ativo']) && $lojista['ativo'];
         });
         
-        error_log('DEBUG: Lojistas REAIS encontrados: ' . count($lojistas_ativos));
-        error_log('DEBUG: Lojistas REAIS: ' . print_r($lojistas_ativos, true));
-        
         wp_send_json_success(array_values($lojistas_ativos));
     }
     
@@ -3740,23 +3727,16 @@ class Sincronizador_WooCommerce {
         $dados_cache = get_transient($chave_cache);
         
         if ($dados_cache !== false) {
-            $tempo_fim = microtime(true);
-            $tempo_execucao = round(($tempo_fim - $tempo_inicio) * 1000, 2);
-            error_log("CACHE HIT: {$chave_cache} - Tempo: {$tempo_execucao}ms");
             return $dados_cache;
         }
         
         // Se não existe no cache, executar função
-        error_log("CACHE MISS: {$chave_cache} - Executando consulta...");
         $dados = call_user_func($callback);
         
         // Salvar no cache com tempo otimizado (10 minutos para primeira consulta)
         $tempo_cache_otimizado = max($expiracao, 600); // Mínimo 10 minutos
         if ($dados !== false) {
             set_transient($chave_cache, $dados, $tempo_cache_otimizado);
-            $tempo_fim = microtime(true);
-            $tempo_execucao = round(($tempo_fim - $tempo_inicio) * 1000, 2);
-            error_log("CACHE SET: {$chave_cache} - Tempo: {$tempo_execucao}ms - Cache: {$tempo_cache_otimizado}s");
         }
         
         return $dados;

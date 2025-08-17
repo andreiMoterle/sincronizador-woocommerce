@@ -6,7 +6,11 @@
 if (!defined('ABSPATH')) {
     exit;
 }
+
+$nonce = wp_create_nonce('sincronizador_wc_nonce');
 ?>
+
+<meta name="sincronizador-wc-nonce" content="<?php echo $nonce; ?>">
 
 <div class="wrap">
     <h1><?php _e('Importar Produtos', 'sincronizador-wc'); ?></h1>
@@ -158,6 +162,11 @@ if (!defined('ABSPATH')) {
                                 <span class="lojista-name"><?php echo esc_html($lojista['nome']); ?></span>
                                 <span class="lojista-url"><?php echo esc_html($lojista['url']); ?></span>
                             </label>
+                            <button type="button" class="button button-small btn-test-connection" 
+                                    data-lojista-id="<?php echo esc_attr($lojista['id']); ?>"
+                                    style="margin-left: 10px; vertical-align: middle;">
+                                🔗 Testar
+                            </button>
                             <div class="lojista-percentual">
                                 <label for="percentual_<?php echo esc_attr($lojista['id']); ?>">
                                     <?php _e('Percentual de acréscimo:', 'sincronizador-wc'); ?>

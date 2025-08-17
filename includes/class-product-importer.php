@@ -277,15 +277,9 @@ class Sincronizador_WC_Product_Importer {
     }
     
     /**
-     * Processar importação em lote
+     * Processar importação em lote (otimizada)
      */
     public function processar_importacao($dados) {
-        error_log('*** SINCRONIZADOR-WC VERSÃO 2.0 - PROCESSAMENTO INICIADO ***');
-        error_log('*** PLUGIN: SINCRONIZADOR-WOOCOMMERCE ***');
-        
-        // Debug: verificar dados recebidos
-        error_log('IMPORTAÇÃO DEBUG - Dados recebidos: ' . print_r($dados, true));
-        
         // Validações básicas
         if (empty($dados['lojista_destino']) || empty($dados['produtos_selecionados'])) {
             return array(
@@ -314,7 +308,7 @@ class Sincronizador_WC_Product_Importer {
         $produtos_fabrica = $this->get_produtos_fabrica();
         $produtos_para_importar = array();
         
-        // Filtrar produtos válidos
+        // Filtrar produtos válidos (otimizado)
         foreach ($dados['produtos_selecionados'] as $produto_id) {
             $produto = $this->find_produto_by_id($produtos_fabrica, $produto_id);
             if ($produto && $produto['status'] === 'ativo') {
@@ -436,10 +430,21 @@ class Sincronizador_WC_Product_Importer {
     }
     
     public function ajax_import_produtos() {
-        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        // Verificar se nonce existe
+        if (!isset($_POST['nonce'])) {
+            wp_send_json_error('Nonce não fornecido');
+            return;
+        }
+        
+        // Verificar nonce
+        if (!wp_verify_nonce($_POST['nonce'], 'sincronizador_wc_nonce')) {
+            wp_send_json_error('Nonce inválido');
+            return;
+        }
         
         if (!current_user_can('manage_woocommerce')) {
-            wp_die('Sem permissão');
+            wp_send_json_error('Sem permissão');
+            return;
         }
         
         $result = $this->processar_importacao($_POST);

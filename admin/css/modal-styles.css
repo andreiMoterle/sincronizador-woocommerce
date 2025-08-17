@@ -439,6 +439,75 @@
     }
 }
 
+/* ==========================================================================
+   ESTILOS PARA LOGS DE IMPORTAÇÃO
+   ========================================================================== */
+
+.import-logs {
+    margin-top: 15px;
+    max-height: 200px;
+    overflow-y: auto;
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    padding: 10px;
+    border: 1px solid #e9ecef;
+}
+
+.log-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+    background-color: white;
+    border-left: 4px solid #6c757d;
+}
+
+.log-item:last-child {
+    margin-bottom: 0;
+}
+
+.log-item.success {
+    border-left-color: #28a745;
+    background-color: #d4f6dd;
+}
+
+.log-item.error {
+    border-left-color: #dc3545;
+    background-color: #fce8e6;
+}
+
+.log-item.info {
+    border-left-color: #17a2b8;
+    background-color: #d1f2eb;
+}
+
+.log-icon {
+    margin-right: 8px;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.import-logs::-webkit-scrollbar {
+    width: 6px;
+}
+
+.import-logs::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.import-logs::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.import-logs::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
 @media (max-width: 480px) {
     .relatorio-resumo {
         grid-template-columns: 1fr;
@@ -455,5 +524,14 @@
     
     .modal-body {
         padding: 15px;
+    }
+    
+    .import-logs {
+        max-height: 150px;
+    }
+    
+    .log-item {
+        font-size: 12px;
+        padding: 6px 10px;
     }
 }

@@ -33,6 +33,9 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
             <button type="button" id="btn-carregar-sincronizados" class="button button-primary" disabled>
                 📊 Carregar Produtos
             </button>
+            <button type="button" id="btn-test-connection" class="button button-secondary btn-test-connection" disabled>
+                🔗 Testar Conexão
+            </button>
             <button type="button" id="btn-sincronizar-vendas" class="button button-secondary" disabled>
                 🔄 Sincronizar Vendas
             </button>
@@ -96,3 +99,74 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
         </div>
     </div>
 </div>
+
+<style>
+/* Estilos para produtos sincronizados */
+.status-publish {
+    color: #00a32a;
+    font-weight: bold;
+}
+
+.status-draft {
+    color: #d63638;
+    font-weight: bold;
+}
+
+.column-foto {
+    width: 60px;
+    text-align: center;
+}
+
+.column-id {
+    width: 80px;
+    text-align: center;
+}
+
+.column-status {
+    width: 120px;
+    text-align: center;
+}
+
+.column-vendas {
+    width: 120px;
+    text-align: center;
+}
+
+.column-acoes {
+    width: 100px;
+    text-align: center;
+}
+
+#produtos-sincronizados-tbody img {
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+/* Modal de detalhes */
+.sincronizador-modal {
+    position: fixed;
+    z-index: 100000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    display: none;
+}
+
+.sincronizador-modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 20px;
+    border: none;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 800px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.sincronizador-modal-footer {
+    margin-top: 20px;
+    text-align: right;
+}
+</style>

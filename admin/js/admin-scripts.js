@@ -23,6 +23,14 @@
     WC.nonce = WC.nonce || '';
     WC.currentImportId = null;
     WC.produtosSincronizados = [];
+    
+    // Fallback para nonce se não estiver disponível
+    if (!WC.nonce) {
+        const nonceMeta = document.querySelector('meta[name="sincronizador-wc-nonce"]');
+        if (nonceMeta) {
+            WC.nonce = nonceMeta.getAttribute('content');
+        }
+    }
     WC.syncInProgress = false;
 
     // Inicialização principal
@@ -37,15 +45,11 @@
     function initSincronizador() {
         const currentPage = detectCurrentPage();
         
-        console.log('🚀 Inicializando Sincronizador - Página:', currentPage);
-        
         // Verificar nonce
         if (!WC.nonce) {
-            console.warn('⚠️ NONCE não encontrado! Tentando localizar...');
             const metaNonce = $('meta[name="sincronizador-wc-nonce"]').attr('content');
             if (metaNonce) {
                 WC.nonce = metaNonce;
-                console.log('✅ NONCE encontrado via meta tag');
             }
         }
         
@@ -118,13 +122,30 @@
     function initSyncPage() {
         console.log('📊 Inicializando página de produtos sincronizados');
         
-        // Busca em tempo real
+        // 🚀 OTIMIZAÇÃO: Busca em tempo real com debounce para melhor performance
+        let searchTimeout;
         $(document).on('input', '#buscar-sincronizado', function() {
             const termo = this.value.toLowerCase();
-            if (WC.produtosSincronizados) {
-                filterProdutosSincronizados(termo);
-            }
+            
+            // Limpar timeout anterior
+            clearTimeout(searchTimeout);
+            
+            // Aguardar 300ms antes de filtrar (debounce)
+            searchTimeout = setTimeout(() => {
+                if (WC.produtosSincronizados) {
+                    filterProdutosSincronizados(termo);
+                }
+            }, 300);
         });
+        
+        // 🚀 NOVA FUNCIONALIDADE: Verificar se há um lojista selecionado e carregar automaticamente
+        setTimeout(() => {
+            const lojistaId = $("#lojista_destino").val();
+            if (lojistaId) {
+                console.log('🔄 Lojista já selecionado na página de sincronizados, carregando produtos automaticamente...');
+                carregarProdutosSincronizados(lojistaId);
+            }
+        }, 500); // Pequeno delay para garantir que a página carregou completamente
     }
 
     /**
@@ -138,6 +159,11 @@
      * EVENTOS GLOBAIS
      */
     function setupGlobalEvents() {
+        // Verificar se já foram configurados para evitar duplicação
+        if (window.sincronizadorEventsSetup) {
+            return;
+        }
+        
         // Sincronização de produtos
         $(document).on('click', '.btn-sincronizar', handleSincronizacao);
         
@@ -156,11 +182,51 @@
         // Carregar produtos sincronizados
         $(document).on('click', '#btn-carregar-sincronizados', handleCarregarSincronizados);
         
+        // Sincronizar vendas
+        $(document).on('click', '#btn-sincronizar-vendas', handleSincronizarVendas);
+        
+        // Limpar cache
+        $(document).on('click', '#btn-limpar-cache', handleLimparCache);
+        
         // Mudança de lojista
         $(document).on('change', '#lojista_destino', handleMudancaLojista);
         
         // Formulários de sincronização
         $(document).on('submit', 'form', handleSubmitForm);
+        
+        // Marcar como configurado
+        window.sincronizadorEventsSetup = true;
+        
+        // Selecionar todos os produtos
+        $(document).on('change', '#selecionar-todos', function() {
+            const isChecked = $(this).is(':checked');
+            console.log('📋 SELECIONAR TODOS - Estado:', isChecked);
+            $("input[name='produtos_selecionados[]']").prop('checked', isChecked);
+            atualizarContadorProdutos();
+        });
+        
+        // Atualizar contador quando produtos individuais são selecionados
+        $(document).on('change', "input[name='produtos_selecionados[]']", function() {
+            console.log('📋 CHECKBOX - Produto selecionado/desmarcado:', this.value, 'checked:', this.checked);
+            atualizarContadorProdutos();
+            
+            // Atualizar estado do "selecionar todos"
+            const total = $("input[name='produtos_selecionados[]']").length;
+            const selecionados = $("input[name='produtos_selecionados[]']:checked").length;
+            console.log('📋 CHECKBOX - Total:', total, 'Selecionados:', selecionados);
+            $('#selecionar-todos').prop('checked', total > 0 && selecionados === total);
+        });
+        
+        // Busca de produtos
+        $(document).on('keyup', '#buscar-produto', function() {
+            const termo = $(this).val().toLowerCase();
+            $('.produto-card').each(function() {
+                const nome = $(this).find('.produto-nome').text().toLowerCase();
+                const sku = $(this).find('.produto-sku').text().toLowerCase();
+                const match = nome.includes(termo) || sku.includes(termo);
+                $(this).toggle(match);
+            });
+        });
     }
 
     /**
@@ -181,25 +247,48 @@
 
     function handleTesteConexao(e) {
         e.preventDefault();
+        console.log('🔧 HANDLE TESTE CONEXÃO - Evento disparado');
+        console.log('🔧 HANDLE TESTE CONEXÃO - Botão clicado:', this);
+        
         const lojistaId = $(this).data('lojista-id') || $('#lojista_destino').val();
+        console.log('🔧 HANDLE TESTE CONEXÃO - Lojista ID:', lojistaId);
         
         if (!lojistaId) {
-            SincronizadorModals.mostrarErro('Selecione um lojista primeiro!');
+            console.log('❌ HANDLE TESTE CONEXÃO - Nenhum lojista selecionado');
+            
+            // Verificar se SincronizadorModals está disponível
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.mostrarErro('Selecione um lojista primeiro!');
+            } else {
+                alert('Selecione um lojista primeiro!');
+                console.log('⚠️ SincronizadorModals não está disponível');
+            }
             return;
         }
         
+        console.log('✅ HANDLE TESTE CONEXÃO - Chamando testarConexao');
         testarConexao(lojistaId, $(this));
     }
 
     function handleValidarLojista(e) {
         e.preventDefault();
+        console.log('🔍 VALIDAR LOJISTA - Botão clicado!');
+        
         const lojistaId = $("#lojista_destino").val();
+        console.log('🔍 VALIDAR LOJISTA - Lojista ID:', lojistaId);
         
         if (!lojistaId) {
-            SincronizadorModals.mostrarErro('Selecione um lojista primeiro!');
+            console.log('🔍 VALIDAR LOJISTA - Erro: Nenhum lojista selecionado');
+            
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.mostrarErro('Selecione um lojista primeiro!');
+            } else {
+                alert('Selecione um lojista primeiro!');
+            }
             return;
         }
         
+        console.log('🔍 VALIDAR LOJISTA - Chamando validarLojista()');
         validarLojista(lojistaId);
     }
 
@@ -225,6 +314,107 @@
         carregarProdutosSincronizados(lojistaId);
     }
 
+    function handleSincronizarVendas(e) {
+        e.preventDefault();
+        const lojistaId = $("#lojista_destino").val();
+        
+        if (!lojistaId) {
+            SincronizadorModals.mostrarErro('Selecione um lojista primeiro!');
+            return;
+        }
+        
+        console.log('🔄 Iniciando sincronização de vendas para lojista:', lojistaId);
+        
+        // Desabilitar botão durante a operação
+        const btn = $(this);
+        const originalText = btn.html();
+        btn.prop('disabled', true).html('🔄 Sincronizando...');
+        
+        // Fazer chamada AJAX
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'sincronizador_wc_sync_vendas',
+                nonce: WC.nonce,
+                lojista_id: lojistaId
+            },
+            success: function(response) {
+                if (response.success) {
+                    console.log('✅ Sincronização de vendas concluída:', response.data);
+                    SincronizadorModals.mostrarSucesso(`✅ Vendas sincronizadas com sucesso! 
+                        Vendas encontradas: ${response.data.vendas_sincronizadas || 0}`);
+                    
+                    // Recarregar produtos sincronizados para mostrar vendas atualizadas
+                    setTimeout(() => {
+                        carregarProdutosSincronizados(lojistaId, true); // Force refresh após sync vendas
+                    }, 1000);
+                } else {
+                    console.error('❌ Erro na sincronização de vendas:', response.data);
+                    SincronizadorModals.mostrarErro('❌ Erro ao sincronizar vendas: ' + response.data);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ Erro AJAX na sincronização de vendas:', error);
+                SincronizadorModals.mostrarErro('❌ Erro de comunicação: ' + error);
+            },
+            complete: function() {
+                // Reabilitar botão
+                btn.prop('disabled', false).html(originalText);
+            }
+        });
+    }
+
+    function handleLimparCache(e) {
+        e.preventDefault();
+        const lojistaId = $("#lojista_destino").val();
+        
+        if (!lojistaId) {
+            SincronizadorModals.mostrarErro('Selecione um lojista primeiro!');
+            return;
+        }
+        
+        console.log('🗑️ Limpando cache para lojista:', lojistaId);
+        
+        // Desabilitar botão durante a operação
+        const btn = $(this);
+        const originalText = btn.html();
+        btn.prop('disabled', true).html('🔄 Limpando...');
+        
+        // Fazer chamada AJAX para limpar cache
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'sincronizador_wc_clear_cache',
+                nonce: WC.nonce,
+                lojista_id: lojistaId
+            },
+            success: function(response) {
+                if (response.success) {
+                    console.log('✅ Cache limpo com sucesso');
+                    SincronizadorModals.mostrarSucesso('🗑️ Cache limpo! Recarregando produtos...');
+                    
+                    // Recarregar produtos sincronizados após limpar cache
+                    setTimeout(() => {
+                        carregarProdutosSincronizados(lojistaId, true); // Force refresh após limpar cache
+                    }, 500);
+                } else {
+                    console.error('❌ Erro ao limpar cache:', response.data);
+                    SincronizadorModals.mostrarErro('❌ Erro ao limpar cache: ' + response.data);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('❌ Erro AJAX ao limpar cache:', error);
+                SincronizadorModals.mostrarErro('❌ Erro de comunicação: ' + error);
+            },
+            complete: function() {
+                // Reabilitar botão
+                btn.prop('disabled', false).html(originalText);
+            }
+        });
+    }
+
     function handleMudancaLojista(e) {
         const lojistaId = this.value;
         console.log('🔄 Lojista alterado:', lojistaId);
@@ -232,6 +422,18 @@
         // Limpar dados anteriores
         $("#produtos-section, #opcoes-importacao, #botoes-acao").hide();
         $("#btn-carregar-produtos").prop("disabled", !lojistaId);
+        
+        // Habilitar/desabilitar botão de validar lojista
+        $("#btn-validar-lojista").prop("disabled", !lojistaId);
+        console.log('🔄 Botão validar lojista agora está:', !lojistaId ? 'DESABILITADO' : 'HABILITADO');
+        
+        // Habilitar/desabilitar botões relacionados à conexão
+        $("#btn-test-connection, #btn-carregar-sincronizados, #btn-sincronizar-vendas, #btn-limpar-cache").prop("disabled", !lojistaId);
+        
+        // Se há um lojista selecionado, atualizar o data-lojista-id do botão de teste
+        if (lojistaId) {
+            $("#btn-test-connection").attr("data-lojista-id", lojistaId);
+        }
     }
 
     function handleSubmitForm(e) {
@@ -308,7 +510,18 @@
     }
 
     function testarConexao(lojistaId, buttonElement) {
-        SincronizadorModals.setButtonLoading(buttonElement, true);
+        console.log('🔧 TESTE CONEXÃO - Iniciando teste para lojista:', lojistaId);
+        console.log('🔧 TESTE CONEXÃO - Botão:', buttonElement);
+        console.log('🔧 TESTE CONEXÃO - WC.ajaxurl:', WC.ajaxurl);
+        console.log('🔧 TESTE CONEXÃO - WC.nonce:', WC.nonce);
+        
+        // Verificar se SincronizadorModals está disponível
+        if (typeof SincronizadorModals !== 'undefined') {
+            SincronizadorModals.setButtonLoading(buttonElement, true);
+        } else {
+            console.log('⚠️ SincronizadorModals não disponível, usando texto simples');
+            buttonElement.text('Testando...').prop('disabled', true);
+        }
         
         $.post(WC.ajaxurl, {
             action: 'sincronizador_wc_validate_lojista',
@@ -316,26 +529,62 @@
             lojista_id: lojistaId
         })
         .done(function(response) {
+            console.log('🔧 TESTE CONEXÃO - Resposta recebida:', response);
+            
             if (response.success) {
-                SincronizadorModals.showToast('✅ Conexão estabelecida com sucesso!', 'success');
+                if (typeof SincronizadorModals !== 'undefined') {
+                    SincronizadorModals.showToast('✅ Conexão estabelecida com sucesso!', 'success');
+                } else {
+                    alert('✅ Conexão estabelecida com sucesso!');
+                }
                 buttonElement.text('✅ Conectado');
             } else {
-                SincronizadorModals.showToast('❌ Falha na conexão: ' + (response.data || 'Erro desconhecido'), 'error');
+                const errorMsg = response.data || response.message || 'Erro desconhecido';
+                console.log('❌ TESTE CONEXÃO - Erro:', errorMsg);
+                
+                if (typeof SincronizadorModals !== 'undefined') {
+                    SincronizadorModals.showToast('❌ Falha na conexão: ' + errorMsg, 'error');
+                } else {
+                    alert('❌ Falha na conexão: ' + errorMsg);
+                }
                 buttonElement.text('❌ Erro');
             }
         })
-        .fail(function() {
-            SincronizadorModals.showToast('❌ Erro de comunicação com o servidor', 'error');
+        .fail(function(xhr, status, error) {
+            console.log('❌ TESTE CONEXÃO - Falha na requisição:', {xhr, status, error});
+            
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.showToast('❌ Erro de comunicação com o servidor', 'error');
+            } else {
+                alert('❌ Erro de comunicação com o servidor');
+            }
             buttonElement.text('❌ Erro');
         })
         .always(function() {
-            SincronizadorModals.setButtonLoading(buttonElement, false, '🔗 Testar Conexão');
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.setButtonLoading(buttonElement, false, '🔗 Testar Conexão');
+            } else {
+                buttonElement.text('🔗 Testar').prop('disabled', false);
+            }
         });
     }
 
     function validarLojista(lojistaId) {
+        console.log('🔍 VALIDAR LOJISTA - Iniciando validação para ID:', lojistaId);
+        console.log('🔍 VALIDAR LOJISTA - WC.ajaxurl:', WC.ajaxurl);
+        console.log('🔍 VALIDAR LOJISTA - WC.nonce:', WC.nonce);
+        console.log('🔍 VALIDAR LOJISTA - SincronizadorModals disponível:', typeof SincronizadorModals !== 'undefined');
+        
         const btn = $("#btn-validar-lojista");
-        SincronizadorModals.setButtonLoading(btn, true);
+        
+        // Verificar se SincronizadorModals está disponível
+        if (typeof SincronizadorModals !== 'undefined') {
+            SincronizadorModals.setButtonLoading(btn, true);
+        } else {
+            btn.prop('disabled', true).text('⏳ Validando...');
+        }
+        
+        console.log('🔍 VALIDAR LOJISTA - Fazendo chamada AJAX...');
         
         $.post(WC.ajaxurl, {
             action: "sincronizador_wc_validate_lojista",
@@ -343,66 +592,129 @@
             lojista_id: lojistaId
         })
         .done(function(response) {
+            console.log('🔍 VALIDAR LOJISTA - Resposta recebida:', response);
             const statusDiv = $("#validacao-status");
             
             if (response.success) {
                 statusDiv.html('<div class="notice notice-success"><p>✅ Lojista validado com sucesso!</p></div>').show();
                 $("#btn-carregar-produtos").prop("disabled", false);
-                SincronizadorModals.showToast('✅ Lojista validado!', 'success');
+                
+                if (typeof SincronizadorModals !== 'undefined') {
+                    SincronizadorModals.showToast('✅ Lojista validado!', 'success');
+                } else {
+                    alert('✅ Lojista validado com sucesso!');
+                }
             } else {
                 statusDiv.html('<div class="notice notice-error"><p>❌ ' + (response.data || 'Erro na validação') + '</p></div>').show();
-                SincronizadorModals.showToast('❌ Erro na validação: ' + response.data, 'error');
+                
+                if (typeof SincronizadorModals !== 'undefined') {
+                    SincronizadorModals.showToast('❌ Erro na validação: ' + response.data, 'error');
+                } else {
+                    alert('❌ Erro na validação: ' + response.data);
+                }
             }
         })
-        .fail(function() {
-            SincronizadorModals.mostrarErro('Erro de comunicação com o servidor');
+        .fail(function(xhr, status, error) {
+            console.log('🔍 VALIDAR LOJISTA - Erro na chamada AJAX:', { xhr, status, error });
+            
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.mostrarErro('Erro de comunicação com o servidor: ' + error);
+            } else {
+                alert('Erro de comunicação com o servidor: ' + error);
+            }
         })
         .always(function() {
-            SincronizadorModals.setButtonLoading(btn, false, '✅ Validar Lojista');
+            console.log('🔍 VALIDAR LOJISTA - Finalizando...');
+            
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.setButtonLoading(btn, false, '🔍 Validar Conexão');
+            } else {
+                btn.prop('disabled', false).text('🔍 Validar Conexão');
+            }
         });
     }
 
     function carregarProdutos() {
+        console.log('📦 CARREGAR PRODUTOS - Iniciando...');
+        
         const btn = $("#btn-carregar-produtos");
-        SincronizadorModals.setButtonLoading(btn, true);
+        
+        if (typeof SincronizadorModals !== 'undefined') {
+            SincronizadorModals.setButtonLoading(btn, true);
+        } else {
+            btn.prop('disabled', true).text('⏳ Carregando...');
+        }
         
         $.post(WC.ajaxurl, {
             action: "sincronizador_wc_get_produtos_fabrica",
             nonce: WC.nonce
         })
         .done(function(response) {
+            console.log('📦 CARREGAR PRODUTOS - Resposta:', response);
             if (response.success) {
                 renderProdutos(response.data);
                 showImportSections();
-                SincronizadorModals.showToast('✅ Produtos carregados com sucesso!', 'success');
+                
+                if (typeof SincronizadorModals !== 'undefined') {
+                    SincronizadorModals.showToast('✅ Produtos carregados com sucesso!', 'success');
+                }
             } else {
-                SincronizadorModals.mostrarErro('Erro ao carregar produtos: ' + (response.data || 'Erro desconhecido'));
+                if (typeof SincronizadorModals !== 'undefined') {
+                    SincronizadorModals.mostrarErro('Erro ao carregar produtos: ' + (response.data || 'Erro desconhecido'));
+                } else {
+                    alert('Erro ao carregar produtos: ' + (response.data || 'Erro desconhecido'));
+                }
             }
         })
-        .fail(function() {
-            SincronizadorModals.mostrarErro('Erro de comunicação com o servidor');
+        .fail(function(xhr, status, error) {
+            console.log('📦 CARREGAR PRODUTOS - Erro AJAX:', { xhr, status, error });
+            
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.mostrarErro('Erro de comunicação com o servidor');
+            } else {
+                alert('Erro de comunicação com o servidor');
+            }
         })
         .always(function() {
-            SincronizadorModals.setButtonLoading(btn, false, '📋 Carregar Produtos');
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.setButtonLoading(btn, false, '📋 Carregar Produtos');
+            } else {
+                btn.prop('disabled', false).text('📋 Carregar Produtos');
+            }
         });
     }
 
     function iniciarImportacao() {
+        console.log('🚀 IMPORTAÇÃO - Iniciando processo de importação...');
+        
         const produtosSelecionados = [];
         $("input[name='produtos_selecionados[]']:checked").each(function() {
             produtosSelecionados.push(this.value);
         });
         
+        console.log('🚀 IMPORTAÇÃO - Produtos selecionados:', produtosSelecionados);
+        
         if (produtosSelecionados.length === 0) {
-            SincronizadorModals.mostrarErro('Selecione pelo menos um produto!');
+            console.log('🚀 IMPORTAÇÃO - Erro: Nenhum produto selecionado');
+            
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.mostrarErro('Selecione pelo menos um produto!');
+            } else {
+                alert('Selecione pelo menos um produto!');
+            }
             return;
         }
 
         const lojistaId = $("#lojista_destino").val();
         const lojistaName = $("#lojista_destino option:selected").text() || 'Lojista';
         
+        console.log('🚀 IMPORTAÇÃO - Lojista ID:', lojistaId);
+        console.log('🚀 IMPORTAÇÃO - Lojista Nome:', lojistaName);
+        
         // Mostrar modal de progresso
-        SincronizadorModals.mostrarModalProgresso(lojistaName);
+        if (typeof SincronizadorModals !== 'undefined') {
+            SincronizadorModals.mostrarModalProgresso(lojistaName);
+        }
         
         const dados = {
             action: "sincronizador_wc_import_produtos",
@@ -415,6 +727,9 @@
             percentual_acrescimo: parseFloat($("#percentual_acrescimo").val()) || 0
         };
         
+        console.log('🚀 IMPORTAÇÃO - Dados a serem enviados:', dados);
+        console.log('🚀 IMPORTAÇÃO - URL:', WC.ajaxurl);
+        
         // Simular progresso
         let progress = 0;
         const progressInterval = setInterval(() => {
@@ -424,6 +739,7 @@
         
         $.post(WC.ajaxurl, dados)
         .done(function(response) {
+            console.log('🚀 IMPORTAÇÃO - Resposta recebida:', response);
             clearInterval(progressInterval);
             SincronizadorModals.atualizarProgresso(100, 'Importação concluída!');
             
@@ -438,29 +754,64 @@
                 }
             }, 1000);
         })
-        .fail(function() {
+        .fail(function(xhr, status, error) {
+            console.error('🚀 IMPORTAÇÃO - Erro AJAX:', { xhr, status, error });
+            console.error('🚀 IMPORTAÇÃO - Response Text:', xhr.responseText);
+            console.error('🚀 IMPORTAÇÃO - Status Code:', xhr.status);
             clearInterval(progressInterval);
             SincronizadorModals.fecharModalProgresso();
-            SincronizadorModals.mostrarErro('Erro de comunicação com o servidor');
+            SincronizadorModals.mostrarErro('Erro de comunicação com o servidor: ' + error);
         });
     }
 
-    function carregarProdutosSincronizados(lojistaId) {
+    function carregarProdutosSincronizados(lojistaId, forceRefresh = false) {
+        console.log('📊 Carregando produtos sincronizados - Lojista:', lojistaId, 'Force refresh:', forceRefresh);
+        
         const btn = $("#btn-carregar-sincronizados");
         SincronizadorModals.setButtonLoading(btn, true);
         
-        $.post(WC.ajaxurl, {
+        // Verificar se já temos dados em cache e não é refresh forçado
+        if (!forceRefresh && WC.produtosSincronizados && WC.produtosSincronizados.length > 0 && WC.ultimoLojistaCarregado === lojistaId) {
+            console.log('📦 Usando dados do cache frontend para velocidade');
+            renderProdutosSincronizados(WC.produtosSincronizados);
+            SincronizadorModals.setButtonLoading(btn, false, '📊 Carregar Sincronizados');
+            SincronizadorModals.showToast('📦 Dados carregados do cache (mais rápido)', 'info');
+            return;
+        }
+        
+        const requestData = {
             action: "sincronizador_wc_get_produtos_sincronizados",
             nonce: WC.nonce,
-            lojista_id: lojistaId,
-            cache_bust: new Date().getTime(),
-            force_refresh: true
-        })
+            lojista_id: lojistaId
+        };
+        
+        // Só forçar refresh se explicitamente solicitado (ex: botão limpar cache)
+        if (forceRefresh) {
+            requestData.cache_bust = new Date().getTime();
+            requestData.force_refresh = true;
+            console.log('🔄 Forçando refresh do cache no servidor');
+        }
+        
+        $.post(WC.ajaxurl, requestData)
         .done(function(response) {
             if (response.success) {
                 WC.produtosSincronizados = response.data;
+                WC.ultimoLojistaCarregado = lojistaId;
                 renderProdutosSincronizados(response.data);
-                SincronizadorModals.showToast('✅ Produtos sincronizados carregados!', 'success');
+                
+                // 🚀 Detectar se veio do cache do banco e mostrar indicador
+                const isFromDbCache = response.data && response.data.length > 0 && !forceRefresh;
+                let cacheMsg;
+                
+                if (forceRefresh) {
+                    cacheMsg = '✅ Produtos atualizados do servidor!';
+                } else if (isFromDbCache) {
+                    cacheMsg = '⚡ Produtos carregados do cache do banco (ultra-rápido)';
+                } else {
+                    cacheMsg = '✅ Produtos carregados!';
+                }
+                
+                SincronizadorModals.showToast(cacheMsg, 'success');
             } else {
                 SincronizadorModals.mostrarErro('Erro ao carregar produtos: ' + (response.data || 'Erro desconhecido'));
             }
@@ -516,7 +867,73 @@
     // Funções que serão implementadas conforme necessário
     function renderProdutos(produtos) {
         console.log('📦 Renderizando produtos:', produtos.length);
-        // TODO: Implementar renderização de produtos
+        
+        const grid = $('#produtos-grid');
+        const resumo = $('#produtos-resumo');
+        
+        if (!produtos || produtos.length === 0) {
+            grid.html('<div style="text-align: center; padding: 40px; color: #666;">Nenhum produto encontrado.</div>');
+            resumo.html('<p>0 produtos disponíveis</p>');
+            return;
+        }
+        
+        // Resumo
+        resumo.html(`<p>${produtos.length} produtos disponíveis para importação</p>`);
+        
+        // Grid de produtos usando a estrutura CSS existente
+        let html = '';
+        
+        produtos.forEach(function(produto) {
+            const precoDisplay = produto.em_promocao ? 
+                `<p><strong>R$ ${produto.preco_promocional.toFixed(2)}</strong> <del>R$ ${produto.preco.toFixed(2)}</del></p>` :
+                `<p><strong>R$ ${produto.preco.toFixed(2)}</strong></p>`;
+            
+            const statusEstoque = produto.estoque > 0 ? 
+                `<p style="color: #27ae60;">✅ ${produto.estoque} em estoque</p>` :
+                `<p style="color: #e74c3c;">❌ Sem estoque</p>`;
+            
+            html += `
+                <div class="produto-card">
+                    <div class="produto-checkbox">
+                        <input type="checkbox" name="produtos_selecionados[]" value="${produto.id}" id="produto-${produto.id}">
+                    </div>
+                    <div class="produto-imagem">
+                        <img src="${produto.imagem}" alt="${produto.nome}" style="width: 80px; height: 80px;" loading="lazy">
+                    </div>
+                    <div class="produto-info">
+                        <h4>${produto.nome}</h4>
+                        <p><strong>SKU:</strong> ${produto.sku}</p>
+                        <p><strong>Categoria:</strong> ${produto.categoria}</p>
+                        ${precoDisplay}
+                        ${statusEstoque}
+                        ${produto.em_promocao ? '<span class="produto-status status-info" style="background: #e74c3c; color: white;">🔥 PROMOÇÃO</span>' : ''}
+                    </div>
+                </div>
+            `;
+        });
+        
+        grid.html(html);
+        
+        // Atualizar contador
+        atualizarContadorProdutos();
+    }
+
+    function atualizarContadorProdutos() {
+        const selecionados = $("input[name='produtos_selecionados[]']:checked").length;
+        const total = $("input[name='produtos_selecionados[]']").length;
+        
+        console.log('📊 CONTADOR - Produtos selecionados:', selecionados, 'de', total);
+        
+        $('#produtos-count').text(`${selecionados} de ${total} produtos selecionados`);
+        
+        // Habilitar/desabilitar botão de importação (ID correto)
+        const btnImportar = $('#btn-iniciar-importacao');
+        if (btnImportar.length) {
+            console.log('📊 CONTADOR - Botão encontrado, habilitando/desabilitando...');
+            btnImportar.prop('disabled', selecionados === 0);
+        } else {
+            console.log('📊 CONTADOR - Botão #btn-iniciar-importacao NÃO encontrado!');
+        }
     }
 
     function showImportSections() {
@@ -526,22 +943,384 @@
 
     function showImportResults(data) {
         console.log('📊 Resultados da importação:', data);
-        // TODO: Implementar exibição de resultados
+        
+        if (!data) {
+            console.log('📊 RESULTADOS - Dados não fornecidos');
+            return;
+        }
+        
+        // Verificar se SincronizadorModals está disponível
+        if (typeof SincronizadorModals === 'undefined') {
+            console.log('📊 RESULTADOS - SincronizadorModals não disponível, usando alert');
+            alert('Importação concluída! Produtos processados: ' + (data.total || data.produtos_importados || 0));
+            return;
+        }
+        
+        // Adaptar os dados para o formato esperado pela função mostrarRelatorioSync
+        // O backend retorna: sucessos, erros, pulados, total, message, logs
+        const dadosRelatorio = {
+            produtos_sincronizados: data.total || data.produtos_importados || 0,
+            produtos_criados: data.sucessos || data.produtos_criados || 0,
+            produtos_atualizados: data.pulados || data.produtos_atualizados || 0,
+            erros: data.erros || 0,
+            tempo: data.tempo || 'N/A',
+            detalhes: data.message || data.detalhes || data.mensagem
+        };
+        
+        // Obter nome do lojista se disponível
+        const lojistaName = $("#lojista_destino option:selected").text() || 'Lojista de Destino';
+        
+        console.log('📊 RESULTADOS - Dados formatados:', dadosRelatorio);
+        console.log('📊 RESULTADOS - Lojista:', lojistaName);
+        
+        // Adicionar logs se disponíveis
+        if (data.logs && Array.isArray(data.logs) && data.logs.length > 0) {
+            let logDetails = '<div class="import-logs">';
+            data.logs.forEach(log => {
+                const logClass = log.type === 'error' ? 'error' : log.type === 'success' ? 'success' : 'info';
+                logDetails += `<div class="log-item ${logClass}"><span class="log-icon">${log.type === 'error' ? '❌' : log.type === 'success' ? '✅' : 'ℹ️'}</span> ${log.message}</div>`;
+            });
+            logDetails += '</div>';
+            dadosRelatorio.detalhes = (dadosRelatorio.detalhes || '') + logDetails;
+        }
+        
+        // Mostrar modal de relatório usando a função existente
+        try {
+            if (typeof SincronizadorModals.mostrarRelatorioSync === 'function') {
+                SincronizadorModals.mostrarRelatorioSync(dadosRelatorio, lojistaName, {
+                    title: '📦 Importação Concluída',
+                    subtitle: `Produtos importados para ${lojistaName}`
+                });
+            } else {
+                // Fallback usando função de sucesso
+                const resumo = `
+                    Importação concluída com sucesso!
+                    
+                    ✅ Produtos importados: ${dadosRelatorio.produtos_criados}
+                    📦 Total processados: ${dadosRelatorio.produtos_sincronizados}
+                    ${dadosRelatorio.produtos_atualizados > 0 ? `⚠️ Pulados: ${dadosRelatorio.produtos_atualizados}` : ''}
+                    ${dadosRelatorio.erros > 0 ? `❌ Erros: ${dadosRelatorio.erros}` : ''}
+                    ${dadosRelatorio.tempo !== 'N/A' ? `⏱️ Tempo: ${dadosRelatorio.tempo}` : ''}
+                `;
+                SincronizadorModals.mostrarSucesso(resumo, '📦 Importação Concluída');
+            }
+        } catch (error) {
+            console.error('📊 RESULTADOS - Erro ao mostrar modal:', error);
+            const totais = `Produtos importados: ${dadosRelatorio.produtos_criados}\nTotal processados: ${dadosRelatorio.produtos_sincronizados}\nErros: ${dadosRelatorio.erros}`;
+            alert(`Importação concluída!\n\n${totais}`);
+        }
+        
+        // 🚀 NOVA FUNCIONALIDADE: Carregar automaticamente produtos sincronizados após importação
+        const lojistaId = $("#lojista_destino").val();
+        if (lojistaId && (dadosRelatorio.produtos_criados > 0 || dadosRelatorio.produtos_atualizados > 0)) {
+            console.log('🔄 Importação bem-sucedida, sugerindo carregamento automático dos produtos sincronizados...');
+            
+            // Verificar se estamos na página de produtos sincronizados
+            const isOnSyncPage = window.location.href.includes('sincronizados');
+            
+            if (isOnSyncPage) {
+                setTimeout(() => {
+                    console.log('🔄 Carregando automaticamente produtos sincronizados...');
+                    carregarProdutosSincronizados(lojistaId);
+                }, 2000); // Aguardar 2 segundos para não sobrecarregar
+            } else {
+                // Se não estiver na página, mostrar sugestão
+                setTimeout(() => {
+                    SincronizadorModals.showToast('💡 Vá para "Produtos Sincronizados" para ver os produtos importados', 'info', 5000);
+                }, 3000);
+            }
+        }
     }
 
     function renderProdutosSincronizados(produtos) {
         console.log('📋 Renderizando produtos sincronizados:', produtos.length);
-        // TODO: Implementar renderização de produtos sincronizados
+        
+        const tbody = $('#produtos-sincronizados-tbody');
+        const tabela = $('#tabela-sincronizados');
+        const totalSpan = $('#total-produtos');
+        
+        if (!produtos || produtos.length === 0) {
+            tbody.html('<tr><td colspan="7" style="text-align: center; padding: 20px;">Nenhum produto sincronizado encontrado.</td></tr>');
+            totalSpan.text('(0 produtos)');
+            tabela.show();
+            return;
+        }
+        
+        // 🚀 OTIMIZAÇÃO: Usar DocumentFragment para renderização muito mais rápida
+        const startTime = performance.now();
+        const fragment = document.createDocumentFragment();
+        
+        produtos.forEach(function(produto) {
+            const statusClass = produto.status === 'publish' ? 'publish' : 'draft';
+            const statusText = produto.status === 'publish' ? 'Publicado' : 'Rascunho';
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="column-foto">
+                    ${produto.imagem ? 
+                        `<img src="${produto.imagem}" alt="${produto.nome}" style="width: 50px; height: 50px; object-fit: cover;" loading="lazy">` : 
+                        '<span class="dashicons dashicons-format-image" style="font-size: 30px; color: #ccc;"></span>'
+                    }
+                </td>
+                <td class="column-id">${produto.id_fabrica}</td>
+                <td>
+                    <strong>${produto.nome}</strong><br>
+                    <small>SKU: ${produto.sku}</small><br>
+                    <small>Preço: R$ ${produto.preco_fabrica}</small>
+                </td>
+                <td class="column-id">${produto.id_destino || 'N/A'}</td>
+                <td class="column-status">
+                    <span class="status-${statusClass}">${statusText}</span>
+                </td>
+                <td class="column-vendas">
+                    ${produto.vendas && produto.vendas > 0 ? 
+                        `<strong>R$ ${produto.vendas}</strong>` : 
+                        '<small>Sem vendas</small>'
+                    }
+                </td>
+                <td class="column-acoes">
+                    <button type="button" class="button button-small" onclick="verDetalhesProduto(${produto.id_fabrica})">
+                        Ver Detalhes
+                    </button>
+                </td>
+            `;
+            fragment.appendChild(tr);
+        });
+        
+        // Limpar e adicionar tudo de uma vez (muito mais rápido)
+        tbody[0].innerHTML = '';
+        tbody[0].appendChild(fragment);
+        
+        totalSpan.text(`(${produtos.length} produtos)`);
+        tabela.show();
+        
+        const endTime = performance.now();
+        console.log(`✅ Produtos renderizados em ${(endTime - startTime).toFixed(2)}ms`);
     }
 
     function filterProdutosSincronizados(termo) {
         console.log('🔍 Filtrando produtos:', termo);
-        // TODO: Implementar filtro de produtos
+        
+        if (!WC.produtosSincronizados || WC.produtosSincronizados.length === 0) {
+            console.log('⚠️ Nenhum produto para filtrar');
+            return;
+        }
+        
+        // 🚀 OTIMIZAÇÃO: Se termo vazio, mostrar todos os produtos rapidamente
+        if (!termo || termo.trim() === '') {
+            console.log('🔍 Termo vazio - mostrando todos os produtos');
+            renderProdutosSincronizados(WC.produtosSincronizados);
+            return;
+        }
+        
+        const startTime = performance.now();
+        const termoLower = termo.toLowerCase();
+        
+        // 🚀 OTIMIZAÇÃO: Filtro mais eficiente
+        const produtosFiltrados = WC.produtosSincronizados.filter(produto => {
+            return produto.nome.toLowerCase().includes(termoLower) ||
+                   produto.sku.toLowerCase().includes(termoLower) ||
+                   (produto.id_fabrica && produto.id_fabrica.toString().includes(termoLower));
+        });
+        
+        const endTime = performance.now();
+        console.log(`🔍 Filtro aplicado em ${(endTime - startTime).toFixed(2)}ms: ${produtosFiltrados.length}/${WC.produtosSincronizados.length} produtos`);
+        renderProdutosSincronizados(produtosFiltrados);
     }
 
     // Expor funções principais globalmente
     WC.showNotice = showNotice;
     WC.formatPrice = formatPrice;
     WC.executarSincronizacao = executarSincronizacao;
+    
+    // Função global para ver detalhes do produto
+    window.verDetalhesProduto = function(produtoId) {
+        console.log('🔍 Ver detalhes do produto:', produtoId);
+        
+        const produto = WC.produtosSincronizados.find(p => p.id_fabrica == produtoId);
+        if (!produto) {
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.mostrarErro('Produto não encontrado');
+            } else {
+                alert('Produto não encontrado');
+            }
+            return;
+        }
+        
+        // Função auxiliar para formatar preço
+        const formatarPreco = (preco) => {
+            if (!preco || preco === 0 || preco === '0') return 'R$ 0,00';
+            const valor = parseFloat(preco.toString().replace(',', '.'));
+            return `R$ ${valor.toFixed(2).replace('.', ',')}`;
+        };
+        
+        // Função auxiliar para status
+        const getStatusBadge = (status) => {
+            const statusMap = {
+                'publish': { text: 'Publicado', class: 'status-publicado', icon: '✅' },
+                'draft': { text: 'Rascunho', class: 'status-rascunho', icon: '📝' },
+                'private': { text: 'Privado', class: 'status-privado', icon: '🔒' },
+                'pending': { text: 'Pendente', class: 'status-pendente', icon: '⏳' }
+            };
+            const info = statusMap[status] || { text: status, class: 'status-outro', icon: '❓' };
+            return `<span class="status-badge ${info.class}">${info.icon} ${info.text}</span>`;
+        };
+        
+        // Gerar HTML das variações se existirem
+        let variacoesHtml = '';
+        if (produto.tem_variacoes && produto.variacoes && produto.variacoes.length > 0) {
+            variacoesHtml = `
+                <div class="variacoes-section">
+                    <h4 style="margin: 20px 0 10px 0; color: #23282d;">🔄 Variações (${produto.variacoes.length})</h4>
+                    <div class="variacoes-grid" style="display: grid; gap: 10px; max-height: 300px; overflow-y: auto;">
+            `;
+            
+            produto.variacoes.forEach((variacao, index) => {
+                let atributosText = '';
+                if (variacao.atributos && variacao.atributos.length > 0) {
+                    atributosText = variacao.atributos.map(attr => `<strong>${attr.nome}:</strong> ${attr.valor}`).join(', ');
+                }
+                
+                variacoesHtml += `
+                    <div class="variacao-item" style="background: #f9f9f9; padding: 12px; border-radius: 6px; border-left: 4px solid #0073aa;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; font-size: 13px;">
+                            <div>
+                                <strong>📋 Variação ${index + 1}</strong><br>
+                                ${variacao.sku ? `<small><strong>SKU:</strong> ${variacao.sku}</small><br>` : ''}
+                                ${atributosText ? `<small>${atributosText}</small>` : '<small><em>Sem atributos</em></small>'}
+                            </div>
+                            <div>
+                                <strong>💰 Preços</strong><br>
+                                <small><strong>Fábrica:</strong> ${formatarPreco(variacao.preco_fabrica)}</small><br>
+                                <small><strong>Lojista:</strong> ${formatarPreco(variacao.preco_destino || 0)}</small>
+                            </div>
+                            <div>
+                                <strong>📦 Estoque</strong><br>
+                                <small><strong>Fábrica:</strong> ${variacao.estoque_fabrica || 0}</small><br>
+                                <small><strong>Lojista:</strong> ${variacao.estoque_destino || 0}</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            variacoesHtml += `
+                    </div>
+                </div>
+            `;
+        } else if (produto.tem_variacoes) {
+            variacoesHtml = `
+                <div class="variacoes-section">
+                    <h4 style="margin: 20px 0 10px 0; color: #23282d;">🔄 Variações</h4>
+                    <p style="color: #666; font-style: italic;">Este produto possui variações, mas os dados não foram carregados. Isso pode ser por questões de performance.</p>
+                </div>
+            `;
+        }
+        
+        // Gerar HTML das vendas
+        let vendasHtml = '';
+        if (produto.vendas && produto.vendas > 0) {
+            vendasHtml = `
+                <div class="vendas-section" style="background: #e8f5e8; padding: 15px; border-radius: 6px; border-left: 4px solid #46b450;">
+                    <h4 style="margin: 0 0 8px 0; color: #23282d;">💰 Vendas</h4>
+                    <p style="margin: 0; font-size: 16px;"><strong>Total:</strong> ${formatarPreco(produto.vendas)}</p>
+                </div>
+            `;
+        } else {
+            vendasHtml = `
+                <div class="vendas-section" style="background: #f0f0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #999;">
+                    <h4 style="margin: 0 0 8px 0; color: #23282d;">💰 Vendas</h4>
+                    <p style="margin: 0; color: #666; font-style: italic;">Sem dados de vendas registradas</p>
+                </div>
+            `;
+        }
+        
+        const modalContent = `
+            <div style="max-width: 700px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;">
+                <!-- Cabeçalho do produto -->
+                <div style="display: flex; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #e1e1e1;">
+                    ${produto.imagem ? `<img src="${produto.imagem}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px; margin-right: 15px;" alt="${produto.nome}">` : ''}
+                    <div style="flex: 1;">
+                        <h3 style="margin: 0 0 5px 0; color: #23282d; font-size: 20px;">${produto.nome}</h3>
+                        <p style="margin: 0; color: #666;">
+                            <strong>SKU:</strong> ${produto.sku || 'N/A'} • 
+                            <strong>Tipo:</strong> ${produto.tipo_produto || 'simples'} • 
+                            ${getStatusBadge(produto.status)}
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Grid principal de informações -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                    <!-- Dados da Fábrica -->
+                    <div style="background: #f0f6ff; padding: 15px; border-radius: 8px; border-left: 4px solid #0073aa;">
+                        <h4 style="margin: 0 0 12px 0; color: #0073aa; font-size: 16px;">🏭 Fábrica (Origem)</h4>
+                        <div style="line-height: 1.6;">
+                            <p style="margin: 0 0 8px 0;"><strong>ID:</strong> ${produto.id_fabrica}</p>
+                            <p style="margin: 0 0 8px 0;"><strong>Preço:</strong> ${formatarPreco(produto.preco_fabrica)}</p>
+                            <p style="margin: 0 0 8px 0;"><strong>Estoque:</strong> ${produto.estoque_fabrica || 0} unidades</p>
+                            <p style="margin: 0;"><strong>Tipo:</strong> ${produto.tipo_produto || 'simples'}</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Dados do Lojista -->
+                    <div style="background: #fff3e0; padding: 15px; border-radius: 8px; border-left: 4px solid #ff9800;">
+                        <h4 style="margin: 0 0 12px 0; color: #ff9800; font-size: 16px;">🏪 Lojista (Destino)</h4>
+                        <div style="line-height: 1.6;">
+                            <p style="margin: 0 0 8px 0;"><strong>ID:</strong> ${produto.id_destino || 'N/A'}</p>
+                            <p style="margin: 0 0 8px 0;"><strong>Preço:</strong> ${formatarPreco(produto.preco_destino || 0)}</p>
+                            <p style="margin: 0 0 8px 0;"><strong>Estoque:</strong> ${produto.estoque_destino || 0} unidades</p>
+                            <p style="margin: 0;"><strong>Última Sync:</strong> ${produto.ultima_sync ? new Date(produto.ultima_sync).toLocaleString('pt-BR') : 'N/A'}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Seção de vendas -->
+                ${vendasHtml}
+                
+                <!-- Seção de variações -->
+                ${variacoesHtml}
+            </div>
+            
+            <style>
+                .status-badge {
+                    display: inline-block;
+                    padding: 3px 8px;
+                    border-radius: 12px;
+                    font-size: 11px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                }
+                .status-publicado { background: #e8f5e8; color: #2e7d32; }
+                .status-rascunho { background: #fff3e0; color: #f57c00; }
+                .status-privado { background: #fce4ec; color: #c2185b; }
+                .status-pendente { background: #e3f2fd; color: #1976d2; }
+                .status-outro { background: #f5f5f5; color: #666; }
+                
+                .variacoes-grid::-webkit-scrollbar {
+                    width: 6px;
+                }
+                .variacoes-grid::-webkit-scrollbar-track {
+                    background: #f1f1f1;
+                }
+                .variacoes-grid::-webkit-scrollbar-thumb {
+                    background: #c1c1c1;
+                    border-radius: 3px;
+                }
+                .variacoes-grid::-webkit-scrollbar-thumb:hover {
+                    background: #a8a8a8;
+                }
+            </style>
+        `;
+        
+        $('#modal-conteudo').html(modalContent);
+        $('#modal-titulo').text(`Detalhes: ${produto.nome}`);
+        $('#modal-detalhes').show();
+    };
+    
+    // Event listener para fechar modal
+    $(document).on('click', '#btn-fechar-modal', function() {
+        $('#modal-detalhes').hide();
+    });
 
 })(jQuery);

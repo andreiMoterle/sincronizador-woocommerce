@@ -549,7 +549,7 @@ class Sincronizador_WooCommerce {
         $produtos_fabrica = $this->get_produtos_locais();
         
         if (empty($produtos_fabrica)) {
-            error_log('SYNC: Nenhum produto encontrado na fábrica');
+
             return array();
         }
 
@@ -568,7 +568,7 @@ class Sincronizador_WooCommerce {
         $erros = 0;
         $resultados = array(); // Array com resultados detalhados
         
-        error_log('SYNC: Iniciando sincronização com ' . count($produtos_fabrica) . ' produtos');
+
         
         foreach ($produtos_fabrica as $produto_fabrica) {
             $resultado_produto = array(
@@ -589,19 +589,19 @@ class Sincronizador_WooCommerce {
                     $resultado_produto['action'] = 'vinculado';
                     // Salvar no histórico para criar vínculo
                     $historico_envios[$lojista_url][$produto_fabrica['id']] = $produto_destino_id;
-                    error_log("SYNC LINK: Produto {$produto_fabrica['sku']} vinculado (ID destino: {$produto_destino_id})");
+
                 } else {
                     // Produto não existe - ignorar
-                    error_log("SYNC SKIP: Produto {$produto_fabrica['sku']} não existe no destino - IGNORADO");
+
                     $resultado_produto['success'] = false;
                     $resultado_produto['action'] = 'ignorado';
                     $resultado_produto['error'] = 'Produto não existe no destino';
                 }
                 
-                error_log("SYNC: Produto {$produto_fabrica['sku']} - " . ($resultado_produto['success'] ? 'SUCESSO' : 'ERRO'));
+
                 
             } catch (Exception $e) {
-                error_log('SYNC ERROR: ' . $e->getMessage());
+
                 $erros++;
                 $resultado_produto['error'] = $e->getMessage();
             }
@@ -615,7 +615,7 @@ class Sincronizador_WooCommerce {
         // Salvar relatório detalhado
         $this->salvar_relatorio_sync($lojista['nome'], $produtos_sincronizados, $produtos_criados, $produtos_atualizados, $erros);
         
-        error_log("SYNC CONCLUÍDO: {$produtos_sincronizados} produtos vinculados (APENAS VÍNCULOS - sem modificar dados no destino)");
+
         
         return $resultados; // Retornar array com detalhes de cada produto
     }
@@ -655,7 +655,7 @@ class Sincronizador_WooCommerce {
                     $variation_prices = $produto->get_variation_prices();
                     if (!empty($variation_prices['price'])) {
                         $preco_atual = min($variation_prices['price']);
-                        error_log("DEBUG IMPORTAÇÃO - Produto variável ID {$produto_post->ID}: menor preço das variações = {$preco_atual}");
+
                     }
                     if (!empty($variation_prices['regular_price'])) {
                         $preco_regular = min($variation_prices['regular_price']);
@@ -670,7 +670,7 @@ class Sincronizador_WooCommerce {
                     }
                 }
                 
-                error_log("DEBUG IMPORTAÇÃO - Produto ID {$produto_post->ID}: regular_price={$preco_regular}, price={$preco_atual}, sale_price={$preco_promocional}");
+
                 
                 // Determinar o melhor preço para exibir
                 $preco_final = '';
@@ -690,7 +690,7 @@ class Sincronizador_WooCommerce {
                     }
                 }
                 
-                error_log("DEBUG IMPORTAÇÃO - Produto ID {$produto_post->ID}: preço final escolhido = {$preco_final}");
+
                 
                 $produtos_formatados[] = array(
                     'id' => $produto->get_id(),
@@ -834,7 +834,7 @@ class Sincronizador_WooCommerce {
         ));
         
         if (is_wp_error($response)) {
-            error_log('ERRO ao buscar produto: ' . $response->get_error_message());
+
             return false;
         }
         
@@ -876,7 +876,7 @@ class Sincronizador_WooCommerce {
         ));
         
         if (is_wp_error($response)) {
-            error_log('ERRO ao criar produto: ' . $response->get_error_message());
+
             return false;
         }
         
@@ -917,7 +917,7 @@ class Sincronizador_WooCommerce {
         ));
         
         if (is_wp_error($response)) {
-            error_log('ERRO ao atualizar produto: ' . $response->get_error_message());
+
             return false;
         }
         
@@ -967,7 +967,7 @@ class Sincronizador_WooCommerce {
         // Em desenvolvimento, permitir todas as URLs para teste
         // Detectar ambiente de desenvolvimento por URL
         if (strpos($url, '.test') !== false || strpos($url, 'localhost') !== false || strpos($url, '127.0.0.1') !== false) {
-            error_log("IMAGEM DEBUG: Permitindo URL de desenvolvimento - $url");
+
             return true;
         }
         
@@ -980,7 +980,7 @@ class Sincronizador_WooCommerce {
             $dev_domains = array('.test', '.local', 'localhost', '127.0.0.1', '192.168.');
             foreach ($dev_domains as $dev_domain) {
                 if (strpos($host, $dev_domain) !== false) {
-                    error_log("IMAGEM BLOQUEADA: URL de desenvolvimento detectada - $url");
+
                     return false;
                 }
             }
@@ -993,20 +993,20 @@ class Sincronizador_WooCommerce {
         ));
         
         if (is_wp_error($response)) {
-            error_log("IMAGEM INACESSÍVEL: Erro ao verificar URL - $url - " . $response->get_error_message());
+
             return false;
         }
         
         $response_code = wp_remote_retrieve_response_code($response);
         if ($response_code !== 200) {
-            error_log("IMAGEM INACESSÍVEL: HTTP $response_code para URL - $url");
+
             return false;
         }
         
         // Verificar content-type se disponível
         $content_type = wp_remote_retrieve_header($response, 'content-type');
         if ($content_type && !str_starts_with($content_type, 'image/')) {
-            error_log("IMAGEM INVÁLIDA: Content-type não é imagem - $url - $content_type");
+
             return false;
         }
         
@@ -1027,7 +1027,7 @@ class Sincronizador_WooCommerce {
             'status' => $erros > 0 ? 'parcial' : 'completo'
         );
         
-        error_log("💾 SALVANDO RELATÓRIO: " . json_encode($relatorio));
+
         
         $historico = get_option('sincronizador_wc_relatorios_sync', array());
         array_unshift($historico, $relatorio);
@@ -1038,7 +1038,7 @@ class Sincronizador_WooCommerce {
         }
         
         $resultado = update_option('sincronizador_wc_relatorios_sync', $historico);
-        error_log("💾 RELATÓRIO SALVO: " . ($resultado ? 'SUCESSO' : 'FALHA') . " - Total no histórico: " . count($historico));
+
         
         // Também adicionar ao histórico simples
         $this->adicionar_historico_sync($lojista_nome, $sincronizados);
@@ -1287,7 +1287,7 @@ class Sincronizador_WooCommerce {
      */
     private function buscar_vendas_lojista($lojista, $data_inicio, $data_fim) {
         if (empty($lojista['url']) || empty($lojista['consumer_key']) || empty($lojista['consumer_secret'])) {
-            error_log("DEBUG: Dados incompletos para lojista: " . $lojista['nome']);
+
             return array('success' => false, 'message' => 'Dados de conexão incompletos');
         }
         
@@ -1308,7 +1308,7 @@ class Sincronizador_WooCommerce {
         
         $url_com_params = add_query_arg($params, $url);
         
-        error_log("DEBUG: Buscando vendas do lojista {$lojista['nome']}: {$url_com_params}");
+
         
         $response = wp_remote_get($url_com_params, array(
             'timeout' => 30,
@@ -1320,14 +1320,14 @@ class Sincronizador_WooCommerce {
         ));
         
         if (is_wp_error($response)) {
-            error_log("DEBUG: Erro na requisição para {$lojista['nome']}: " . $response->get_error_message());
+
             return array('success' => false, 'message' => $response->get_error_message());
         }
         
         $http_code = wp_remote_retrieve_response_code($response);
         
         if ($http_code !== 200) {
-            error_log("DEBUG: HTTP {$http_code} para {$lojista['nome']}: " . wp_remote_retrieve_body($response));
+
             return array('success' => false, 'message' => "HTTP {$http_code}");
         }
         
@@ -1335,7 +1335,7 @@ class Sincronizador_WooCommerce {
         $pedidos = json_decode($body, true);
         
         if (!is_array($pedidos)) {
-            error_log("DEBUG: Resposta inválida do lojista {$lojista['nome']}: " . $body);
+
             return array('success' => false, 'message' => 'Resposta inválida da API');
         }
         
@@ -1362,7 +1362,7 @@ class Sincronizador_WooCommerce {
         // Por enquanto, verificar se há mais páginas nos headers
         $headers = wp_remote_retrieve_headers($response);
         if (isset($headers['x-wp-totalpages']) && $headers['x-wp-totalpages'] > 1) {
-            error_log("DEBUG: Lojista {$lojista['nome']} tem {$headers['x-wp-totalpages']} páginas. Implementar paginação!");
+
             // TODO: Buscar outras páginas
         }
         
@@ -1372,7 +1372,7 @@ class Sincronizador_WooCommerce {
             'produtos_vendidos' => $produtos_vendidos
         );
         
-        error_log("DEBUG: Vendas do lojista {$lojista['nome']}: " . print_r($dados, true));
+
         
         return array('success' => true, 'data' => $dados);
     }
@@ -1601,7 +1601,7 @@ class Sincronizador_WooCommerce {
         $manter_precos = isset($data['manter_precos']);
         
         // Log da importação
-        error_log("Sincronizador WC: Importação iniciada - Lojista: $lojista_id, Produto: $buscar_produto");
+
         
         return true;
     }
@@ -1789,7 +1789,7 @@ class Sincronizador_WooCommerce {
         
         // Inicializar admin menu
         if (is_admin()) {
-            error_log('DEBUG: is_admin() = TRUE');
+
             // COMENTADO: Evitar conflito de duplo registro de menus
             // if (class_exists('Sincronizador_WC_Admin_Menu')) {
             //     error_log('DEBUG: Classe Sincronizador_WC_Admin_Menu existe, inicializando...');
@@ -1797,9 +1797,9 @@ class Sincronizador_WooCommerce {
             // } else {
             //     error_log('DEBUG: Classe Sincronizador_WC_Admin_Menu NÃO existe!');
             // }
-            error_log('DEBUG: Usando apenas menus da classe principal');
+
         } else {
-            error_log('DEBUG: is_admin() = FALSE');
+
         }
         
         // Inicializar AJAX
@@ -2011,12 +2011,12 @@ class Sincronizador_WooCommerce {
      * Testa a conexão com a API do WooCommerce
      */
     private function test_woocommerce_connection($lojista) {
-        error_log('🔧 TEST WOOCOMMERCE CONNECTION - Iniciando teste');
-        error_log('🔧 TEST WOOCOMMERCE CONNECTION - Lojista: ' . $lojista['nome']);
-        error_log('🔧 TEST WOOCOMMERCE CONNECTION - URL: ' . $lojista['url']);
+
+
+
         
         $url = trailingslashit($lojista['url']) . 'wp-json/wc/v3/system_status';
-        error_log('🔧 TEST WOOCOMMERCE CONNECTION - URL completa: ' . $url);
+
         
         $response = wp_remote_get($url, array(
             'timeout' => 8,
@@ -2028,7 +2028,7 @@ class Sincronizador_WooCommerce {
         
         if (is_wp_error($response)) {
             $error_msg = 'Erro de conexão: ' . $response->get_error_message();
-            error_log('❌ TEST WOOCOMMERCE CONNECTION - ' . $error_msg);
+
             return array(
                 'success' => false,
                 'message' => $error_msg
@@ -2036,22 +2036,22 @@ class Sincronizador_WooCommerce {
         }
         
         $response_code = wp_remote_retrieve_response_code($response);
-        error_log('🔧 TEST WOOCOMMERCE CONNECTION - Response code: ' . $response_code);
+
         
         if ($response_code === 200) {
             $body = json_decode(wp_remote_retrieve_body($response), true);
-            error_log('🔧 TEST WOOCOMMERCE CONNECTION - Body recebido: ' . (empty($body) ? 'vazio' : 'com dados'));
+
             
             if (isset($body['environment']['version'])) {
                 $success_msg = 'Conexão OK! WooCommerce versão: ' . $body['environment']['version'];
-                error_log('✅ TEST WOOCOMMERCE CONNECTION - ' . $success_msg);
+
                 return array(
                     'success' => true,
                     'message' => $success_msg
                 );
             } else {
                 $success_msg = 'Conexão estabelecida com sucesso!';
-                error_log('✅ TEST WOOCOMMERCE CONNECTION - ' . $success_msg);
+
                 return array(
                     'success' => true,
                     'message' => $success_msg
@@ -2059,14 +2059,14 @@ class Sincronizador_WooCommerce {
             }
         } else if ($response_code === 401) {
             $error_msg = 'Erro de autenticação. Verifique as credenciais (Consumer Key/Secret).';
-            error_log('❌ TEST WOOCOMMERCE CONNECTION - ' . $error_msg);
+
             return array(
                 'success' => false,
                 'message' => $error_msg
             );
         } else if ($response_code === 404) {
             $error_msg = 'API WooCommerce não encontrada. Verifique se WooCommerce está ativo na loja destino.';
-            error_log('❌ TEST WOOCOMMERCE CONNECTION - ' . $error_msg);
+
             return array(
                 'success' => false,
                 'message' => $error_msg
@@ -2082,7 +2082,7 @@ class Sincronizador_WooCommerce {
                 if (strpos($error_message, 'image_upload_error') !== false || 
                     strpos($error_message, 'Erro ao obter a imagem remota') !== false) {
                     $error_msg = 'Erro de imagem detectado. Conexão API OK, mas há problemas com URLs de imagens. Configure imagens com URLs válidas e acessíveis.';
-                    error_log('❌ TEST WOOCOMMERCE CONNECTION - ' . $error_msg);
+
                     return array(
                         'success' => false,
                         'message' => $error_msg
@@ -2091,14 +2091,14 @@ class Sincronizador_WooCommerce {
             }
             
             $error_msg = 'Erro HTTP 400: ' . $error_message;
-            error_log('❌ TEST WOOCOMMERCE CONNECTION - ' . $error_msg);
+
             return array(
                 'success' => false,
                 'message' => $error_msg
             );
         } else {
             $error_msg = 'Erro HTTP ' . $response_code . '. Verifique a URL da loja.';
-            error_log('❌ TEST WOOCOMMERCE CONNECTION - ' . $error_msg);
+
             return array(
                 'success' => false,
                 'message' => $error_msg
@@ -2110,23 +2110,23 @@ class Sincronizador_WooCommerce {
      * AJAX: Validar lojista
      */
     public function ajax_validate_lojista() {
-        error_log('🔧 AJAX VALIDATE LOJISTA - Início da função');
+
         
         check_ajax_referer('sincronizador_wc_nonce', 'nonce');
         
         if (!current_user_can('manage_woocommerce')) {
-            error_log('❌ AJAX VALIDATE LOJISTA - Sem permissão');
+
             wp_die('Sem permissão');
         }
         
         $lojista_id = intval($_POST['lojista_id']);
         $produto_id = isset($_POST['produto_id']) ? intval($_POST['produto_id']) : null;
         
-        error_log('🔧 AJAX VALIDATE LOJISTA - Lojista ID: ' . $lojista_id);
-        error_log('🔧 AJAX VALIDATE LOJISTA - Produto ID: ' . ($produto_id ?: 'não definido'));
+
+
         
         $lojistas = get_option('sincronizador_wc_lojistas', array());
-        error_log('🔧 AJAX VALIDATE LOJISTA - Total lojistas: ' . count($lojistas));
+
         
         // Procurar lojista pelo ID
         $lojista_data = null;
@@ -2138,15 +2138,15 @@ class Sincronizador_WooCommerce {
         }
         
         if (!$lojista_data) {
-            error_log('❌ AJAX VALIDATE LOJISTA - Lojista não encontrado - ID: ' . $lojista_id);
+
             wp_send_json_error('Lojista não encontrado - ID: ' . $lojista_id);
         }
         
-        error_log('✅ AJAX VALIDATE LOJISTA - Lojista encontrado: ' . $lojista_data['nome']);
+
         
         // Se foi passado um produto_id, retornar dados específicos do produto
         if ($produto_id) {
-            error_log('🔧 AJAX VALIDATE LOJISTA - Testando produto específico: ' . $produto_id);
+
             $resultado = $this->testar_produto_destino($lojista_data, $produto_id);
             if ($resultado['success']) {
                 wp_send_json_success($resultado['data']);
@@ -2157,11 +2157,11 @@ class Sincronizador_WooCommerce {
         }
         
         // Senão, fazer teste geral de conexão
-        error_log('🔧 AJAX VALIDATE LOJISTA - Testando conexão geral');
+
         $result = $this->test_woocommerce_connection($lojista_data);
         
-        error_log('🔧 AJAX VALIDATE LOJISTA - Resultado do teste: ' . ($result['success'] ? 'SUCESSO' : 'FALHA'));
-        error_log('🔧 AJAX VALIDATE LOJISTA - Mensagem: ' . $result['message']);
+
+
         
         if ($result['success']) {
             wp_send_json_success(array('message' => $result['message']));
@@ -2216,26 +2216,26 @@ class Sincronizador_WooCommerce {
      * AJAX: Obter produtos da fábrica
      */
     public function ajax_get_produtos_fabrica() {
-        error_log("DEBUG AJAX IMPORTAÇÃO - Início da função ajax_get_produtos_fabrica");
+
         
         check_ajax_referer('sincronizador_wc_nonce', 'nonce');
         
         if (!current_user_can('manage_woocommerce')) {
-            error_log("DEBUG AJAX IMPORTAÇÃO - Usuário sem permissão manage_woocommerce");
+
             wp_die('Sem permissão');
         }
         
-        error_log("DEBUG AJAX IMPORTAÇÃO - Chamando get_produtos_locais()");
+
         // Buscar produtos locais (da fábrica)
         $produtos = $this->get_produtos_locais();
-        error_log("DEBUG AJAX IMPORTAÇÃO - get_produtos_locais retornou " . count($produtos) . " produtos");
+
         
         if (empty($produtos)) {
-            error_log("DEBUG AJAX IMPORTAÇÃO - Nenhum produto encontrado, retornando erro");
+
             wp_send_json_error('Nenhum produto encontrado na fábrica. Certifique-se de ter produtos WooCommerce com SKU cadastrados.');
         }
         
-        error_log("DEBUG AJAX IMPORTAÇÃO - Iniciando formatação de " . count($produtos) . " produtos");
+
         // Formatar produtos para exibição
         $produtos_formatados = array();
         foreach ($produtos as $produto) {
@@ -2285,7 +2285,7 @@ class Sincronizador_WooCommerce {
             // Determinar se está em promoção (preço promocional menor que regular)
             $em_promocao = ($preco_promocional > 0 && $preco_regular > 0 && $preco_promocional < $preco_regular);
             
-            error_log("DEBUG AJAX IMPORTAÇÃO - Produto {$produto['id']}: regular={$preco_regular}, promocional={$preco_promocional}, em_promocao=" . ($em_promocao ? 'SIM' : 'NÃO'));
+
             
             $produtos_formatados[] = array(
                 'id' => $produto['id'],
@@ -2303,7 +2303,7 @@ class Sincronizador_WooCommerce {
             );
         }
         
-        error_log("DEBUG AJAX IMPORTAÇÃO - Retornando " . count($produtos_formatados) . " produtos formatados");
+
         wp_send_json_success($produtos_formatados);
     }
     
@@ -2501,7 +2501,7 @@ class Sincronizador_WooCommerce {
             wp_cache_flush();
         }
         
-        error_log("🧹 CACHE LIMPO: Removido cache de produtos sincronizados para lojista ID: {$lojista_id}");
+
     }
 
     /**
@@ -2711,14 +2711,14 @@ class Sincronizador_WooCommerce {
                         if ($var_dest['id'] == $variacao_id) {
                             $variacao_destino = $var_dest;
                             $variacao_id_destino = $var_dest['id'];
-                            error_log("DEBUG VARIACAO - Mapeamento direto por ID: fábrica {$variacao_id} -> destino {$variacao_id_destino}");
+
                             break;
                         }
                     }
                 }
                 
                 if (!$variacao_destino) {
-                    error_log("DEBUG VARIACAO - Nenhuma correspondência direta encontrada para variação fábrica ID {$variacao_id}");
+
                     continue;
                 }
                 
@@ -2729,15 +2729,15 @@ class Sincronizador_WooCommerce {
                         // O JSON usa os IDs da fábrica, não do destino
                         if ($venda_var['variacao_id'] == $variacao_id) {
                             $vendas_desta_variacao = $venda_var['vendas'];
-                            error_log("DEBUG VENDAS VARIAÇÃO - Variação fábrica ID {$variacao_id}: {$vendas_desta_variacao} vendas encontradas");
+
                             break;
                         }
                     }
                     if ($vendas_desta_variacao === 0) {
-                        error_log("DEBUG VENDAS VARIAÇÃO - Variação fábrica ID {$variacao_id}: Nenhuma venda encontrada nos dados");
+
                     }
                 } else {
-                    error_log("DEBUG VENDAS VARIAÇÃO - Nenhum dado de vendas por variação disponível");
+
                 }
                 
                 $variacoes_completas[] = array(
@@ -2773,7 +2773,7 @@ class Sincronizador_WooCommerce {
             'ultima_sync' => date('Y-m-d\TH:i:s')
         );
         
-        error_log("DEBUG AJAX DETALHES - Produto completo enviado: " . json_encode($produto_completo));
+
         
         wp_send_json_success($produto_completo);
     }
@@ -3014,7 +3014,7 @@ class Sincronizador_WooCommerce {
         $vendas = $this->get_vendas_produto_destino($lojista_data, $produto_id_destino);
         
         $vendas_display = is_array($vendas) ? json_encode($vendas) : $vendas;
-        error_log("DEBUG VENDAS FINAL - Produto ID {$produto_id_destino}: {$vendas_display} vendas retornadas");
+
         
         // Cache por 1 minuto (vendas mudam menos)
         // set_transient($cache_key, $vendas, 60);
@@ -3037,7 +3037,7 @@ class Sincronizador_WooCommerce {
         ));
         
         if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
-            error_log("ERRO ao buscar produto destino ID {$produto_id_destino}: " . (is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_response_code($response)));
+
             return false;
         }
         
@@ -3045,7 +3045,7 @@ class Sincronizador_WooCommerce {
         
         // Log para debug do estoque
         if ($produto_data) {
-            error_log("ESTOQUE DESTINO - Produto ID {$produto_id_destino}: manage_stock=" . ($produto_data['manage_stock'] ?? 'false') . ", stock_quantity=" . ($produto_data['stock_quantity'] ?? 'null') . ", stock_status=" . ($produto_data['stock_status'] ?? 'null'));
+
         }
         
         return $produto_data;
@@ -3080,12 +3080,12 @@ class Sincronizador_WooCommerce {
      * Obter vendas do produto no destino
      */
     private function get_vendas_produto_destino($lojista_data, $produto_id_destino) {
-        error_log("DEBUG VENDAS - Iniciando busca para produto ID {$produto_id_destino}");
+
         
         // PRIMEIRO: Tentar endpoint customizado direto no banco
         $vendas_diretas = $this->get_vendas_produto_direto_banco($lojista_data, $produto_id_destino);
         if ($vendas_diretas !== null && isset($vendas_diretas['total_vendas'])) {
-            error_log("DEBUG VENDAS - Endpoint customizado retornou: {$vendas_diretas['total_vendas']} vendas");
+
             return $vendas_diretas;  // Retornar dados completos para uso no modal
         }
         
@@ -3103,14 +3103,14 @@ class Sincronizador_WooCommerce {
         
         if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
             $produto_data = json_decode(wp_remote_retrieve_body($response), true);
-            error_log("DEBUG VENDAS - Produto obtido com sucesso, tipo: " . ($produto_data['type'] ?? 'unknown'));
+
             
             // Se é produto simples e tem _total_sales
             if (isset($produto_data['meta_data'])) {
                 foreach ($produto_data['meta_data'] as $meta) {
                     if ($meta['key'] === '_total_sales' && !empty($meta['value'])) {
                         $vendas_simples = intval($meta['value']);
-                        error_log("DEBUG VENDAS - Produto simples, _total_sales encontrado: {$vendas_simples}");
+
                         if ($vendas_simples > 0) {
                             return $vendas_simples;
                         }
@@ -3120,19 +3120,19 @@ class Sincronizador_WooCommerce {
             
             // Se é produto variável, buscar vendas das variações
             if (isset($produto_data['type']) && $produto_data['type'] === 'variable') {
-                error_log("DEBUG VENDAS - Produto variável detectado, buscando vendas das variações");
+
                 $vendas_variaveis = $this->get_vendas_produto_variavel($lojista_data, $produto_id_destino);
-                error_log("DEBUG VENDAS - Vendas variáveis retornadas: {$vendas_variaveis}");
+
                 return $vendas_variaveis;
             }
         } else {
-            error_log("DEBUG VENDAS - Erro ao buscar produto: " . (is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_response_code($response)));
+
         }
         
         // Fallback: tentar relatórios WooCommerce
-        error_log("DEBUG VENDAS - Tentando fallback com relatórios");
+
         $fallback_result = $this->get_vendas_produto_destino_fallback($lojista_data, $produto_id_destino);
-        error_log("DEBUG VENDAS - Fallback retornou: " . ($fallback_result ?? 'null'));
+
         return $fallback_result;
     }
     
@@ -3143,7 +3143,7 @@ class Sincronizador_WooCommerce {
         // PRIMEIRO: Tentar método customizado direto no banco
         $vendas_diretas = $this->get_vendas_produto_direto_banco($lojista_data, $produto_id_destino);
         if ($vendas_diretas !== null && isset($vendas_diretas['total_vendas']) && $vendas_diretas['total_vendas'] > 0) {
-            error_log("VENDAS BANCO DIRETO - Produto ID {$produto_id_destino}: {$vendas_diretas['total_vendas']} vendas encontradas");
+
             return $vendas_diretas['total_vendas'];
         }
         
@@ -3160,7 +3160,7 @@ class Sincronizador_WooCommerce {
         ));
         
         if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
-            error_log("ERRO ao buscar variações do produto {$produto_id_destino}: " . (is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_response_code($response)));
+
             return 0;
         }
         
@@ -3182,14 +3182,14 @@ class Sincronizador_WooCommerce {
                     if ($meta['key'] === '_total_sales' && !empty($meta['value'])) {
                         $vendas_variacao = intval($meta['value']);
                         $total_vendas += $vendas_variacao;
-                        error_log("VENDAS VARIAÇÃO ID {$variacao_id}: {$vendas_variacao} vendas");
+
                         break;
                     }
                 }
             }
         }
         
-        error_log("VENDAS TOTAL PRODUTO VARIÁVEL ID {$produto_id_destino}: {$total_vendas} vendas");
+
         return $total_vendas;
     }
     
@@ -3200,7 +3200,7 @@ class Sincronizador_WooCommerce {
         // NOVA ESTRATÉGIA: Endpoint público simples sem autenticação
         $url_simples = trailingslashit($lojista_data['url']) . 'wp-json/sincronizador/v1/vendas-simples/' . $produto_id_destino;
         
-        error_log("VENDAS SIMPLES - Consultando: " . $url_simples);
+
         
         $response = wp_remote_get($url_simples, array(
             'timeout' => 10,
@@ -3212,12 +3212,12 @@ class Sincronizador_WooCommerce {
         if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
             $data = json_decode(wp_remote_retrieve_body($response), true);
             if (isset($data['total_vendas'])) {
-                error_log("VENDAS SIMPLES - Produto ID {$produto_id_destino}: {$data['total_vendas']} vendas encontradas");
+
                 return $data; // Retornar dados completos incluindo vendas_por_variacao
             }
         } else if (!is_wp_error($response)) {
             $response_code = wp_remote_retrieve_response_code($response);
-            error_log("VENDAS SIMPLES - Erro HTTP {$response_code} para produto {$produto_id_destino}: " . wp_remote_retrieve_body($response));
+
         }
         
         // Fallback: tentar endpoint com autenticação (antigo)
@@ -3234,12 +3234,12 @@ class Sincronizador_WooCommerce {
         if (!is_wp_error($response_auth) && wp_remote_retrieve_response_code($response_auth) === 200) {
             $data_auth = json_decode(wp_remote_retrieve_body($response_auth), true);
             if (isset($data_auth['total_vendas'])) {
-                error_log("VENDAS AUTH FALLBACK - Produto ID {$produto_id_destino}: {$data_auth['total_vendas']} vendas encontradas");
+
                 return $data_auth;
             }
         }
         
-        error_log("VENDAS - Nenhum endpoint funcionou para produto {$produto_id_destino}");
+
         return null;
     }
     
@@ -3258,15 +3258,15 @@ class Sincronizador_WooCommerce {
         ));
         
         if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
-            error_log("DEBUG VENDAS FALLBACK - Erro na requisição: " . (is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_response_code($response)));
+
             return 0;
         }
         
         $data = json_decode(wp_remote_retrieve_body($response), true);
-        error_log("DEBUG VENDAS FALLBACK - Dados recebidos: " . json_encode($data));
+
         
         $vendas = isset($data[0]['items_sold']) ? intval($data[0]['items_sold']) : 0;
-        error_log("DEBUG VENDAS FALLBACK - Vendas retornadas: {$vendas}");
+
         
         return $vendas;
     }
@@ -3282,7 +3282,7 @@ class Sincronizador_WooCommerce {
         $preco_meta = get_post_meta($id, '_price', true);
         $regular_meta = get_post_meta($id, '_regular_price', true);
         
-        error_log("DEBUG PREÇO - Produto ID {$id}: get_price()={$preco_atual}, get_regular_price()={$preco_regular}, _price meta={$preco_meta}, _regular_price meta={$regular_meta}");
+
         
         // Primeiro tenta pegar o preço atual (com promoção se houver)
         $preco = $produto->get_price();
@@ -3301,7 +3301,7 @@ class Sincronizador_WooCommerce {
         }
         
         $preco_final = is_numeric($preco) && floatval($preco) > 0 ? floatval($preco) : 0;
-        error_log("DEBUG PREÇO - Produto ID {$id}: preço final calculado = {$preco_final}");
+
         
         return $preco_final;
     }
@@ -3364,13 +3364,13 @@ class Sincronizador_WooCommerce {
      */
     private function formatar_preco_destino($dados_destino) {
         if (!$dados_destino) {
-            error_log("DEBUG PREÇO DESTINO: dados_destino é falso/vazio");
+
             return 0;
         }
         
         $preco_atual = $dados_destino['price'] ?? 'não definido';
         $preco_regular = $dados_destino['regular_price'] ?? 'não definido';
-        error_log("DEBUG PREÇO DESTINO: price={$preco_atual}, regular_price={$preco_regular}");
+
         
         // Primeiro tenta pegar o preço atual (com promoção se houver)
         $preco = $dados_destino['price'] ?? null;
@@ -3381,7 +3381,7 @@ class Sincronizador_WooCommerce {
         }
         
         $preco_final = is_numeric($preco) && floatval($preco) > 0 ? floatval($preco) : 0;
-        error_log("DEBUG PREÇO DESTINO: preço final calculado = {$preco_final}");
+
         
         return $preco_final;
     }
@@ -3437,7 +3437,7 @@ class Sincronizador_WooCommerce {
         $lojista_id = intval($_POST['lojista_id']);
         $start_time = microtime(true);
         
-        error_log("🔄 AJAX SYNC - Iniciando sincronização para lojista: {$lojista_id}");
+
         
         try {
             // Executar sincronização
@@ -3491,7 +3491,7 @@ class Sincronizador_WooCommerce {
             }
             
         } catch (Exception $e) {
-            error_log("❌ AJAX SYNC - Exceção: " . $e->getMessage());
+
             wp_send_json_error('Erro interno: ' . $e->getMessage());
         }
     }
@@ -3508,12 +3508,12 @@ class Sincronizador_WooCommerce {
                 $lojistas[$key]['ultima_sync'] = current_time('mysql');
                 update_option('sincronizador_wc_lojistas', $lojistas);
                 
-                error_log("📅 Data de sincronização atualizada para lojista {$lojista_id}: " . $lojistas[$key]['ultima_sync']);
+
                 return true;
             }
         }
         
-        error_log("❌ Lojista {$lojista_id} não encontrado para atualizar data de sync");
+
         return false;
     }
     /**
@@ -3757,7 +3757,7 @@ class Sincronizador_WooCommerce {
             )
         );
         
-        error_log("DEBUG: Cache de relatórios limpo");
+
     }
 
     /**
@@ -3804,7 +3804,7 @@ class Sincronizador_WooCommerce {
             $data_fim = date('Y-m-d');
         }
         
-        error_log("DEBUG: Buscando resumo de vendas - Lojista: {$lojista_filtro}, Período: {$periodo} dias, De: {$data_inicio} até {$data_fim}");
+
         
         $lojistas = $this->get_lojistas();
         $lojistas_ativos = array_filter($lojistas, function($lojista) {
@@ -3826,7 +3826,7 @@ class Sincronizador_WooCommerce {
             }
             
             if ($lojista_data) {
-                error_log("DEBUG: Buscando vendas específicas do lojista: " . $lojista_data['nome']);
+
                 $vendas_lojista = $this->buscar_vendas_lojista($lojista_data, $data_inicio, $data_fim);
                 
                 if ($vendas_lojista['success']) {
@@ -3837,7 +3837,7 @@ class Sincronizador_WooCommerce {
             }
         } else {
             // Somar vendas de todos os lojistas ativos
-            error_log("DEBUG: Somando vendas de todos os lojistas ativos: " . count($lojistas_ativos));
+
             
             foreach ($lojistas_ativos as $lojista) {
                 $vendas_lojista = $this->buscar_vendas_lojista($lojista, $data_inicio, $data_fim);
@@ -3901,7 +3901,7 @@ class Sincronizador_WooCommerce {
             $data_fim = date('Y-m-d');
         }
         
-        error_log("DEBUG: Gerando gráfico vendas por lojista - De: {$data_inicio} até {$data_fim}");
+
         
         $lojistas = $this->get_lojistas();
         $lojistas_ativos = array_filter($lojistas, function($lojista) {
@@ -3921,14 +3921,14 @@ class Sincronizador_WooCommerce {
             
             if ($vendas_lojista['success']) {
                 $dados_grafico['valores'][] = floatval($vendas_lojista['data']['total_vendas']);
-                error_log("DEBUG: Vendas do lojista {$lojista['nome']}: R$ " . $vendas_lojista['data']['total_vendas']);
+
             } else {
                 $dados_grafico['valores'][] = 0;
-                error_log("DEBUG: Erro ao buscar vendas do lojista {$lojista['nome']}: " . $vendas_lojista['message']);
+
             }
         }
         
-        error_log("DEBUG: Dados do gráfico por lojista: " . print_r($dados_grafico, true));
+
         
         return $dados_grafico;
     }
@@ -3977,7 +3977,7 @@ class Sincronizador_WooCommerce {
             $data_fim = date('Y-m-d');
         }
         
-        error_log("DEBUG: Buscando produtos mais vendidos - Lojista: {$lojista_filtro}, Período: {$periodo} dias");
+
         
         $lojistas = $this->get_lojistas();
         $lojistas_ativos = array_filter($lojistas, function($lojista) {
@@ -4035,7 +4035,7 @@ class Sincronizador_WooCommerce {
             $produtos_mais_vendidos = array_slice(array_values($produtos_agregados), 0, 10);
         }
         
-        error_log("DEBUG: Produtos mais vendidos encontrados: " . count($produtos_mais_vendidos));
+
         
         return $produtos_mais_vendidos;
     }
@@ -4045,7 +4045,7 @@ class Sincronizador_WooCommerce {
      */
     private function buscar_produtos_mais_vendidos_lojista($lojista, $data_inicio, $data_fim) {
         if (empty($lojista['url']) || empty($lojista['consumer_key']) || empty($lojista['consumer_secret'])) {
-            error_log("DEBUG: Dados incompletos para buscar produtos do lojista: " . $lojista['nome']);
+
             return array();
         }
         
@@ -4220,7 +4220,7 @@ class Sincronizador_WooCommerce {
             $data_fim = date('Y-m-d');
         }
         
-        error_log("DEBUG: Buscando vendas detalhadas para lojista: {$lojista_filtro} - Página: {$page}");
+
         
         // Buscar dados do lojista
         $lojistas = $this->get_lojistas();
@@ -4333,7 +4333,7 @@ class Sincronizador_WooCommerce {
             )
         );
         
-        error_log("DEBUG: Vendas detalhadas encontradas para lojista {$lojista_data['nome']}: " . count($vendas) . " de " . $total_pedidos);
+
         
         return $response;
     }
@@ -4367,40 +4367,31 @@ class Sincronizador_WooCommerce {
             $data_fim = date('Y-m-d');
         }
         
-        // Buscar nome do lojista
-        $nome_lojista = 'Lojista';
+        // Buscar dados do lojista
+        $lojista_data = null;
         $lojistas = $this->get_lojistas();
         foreach ($lojistas as $lojista) {
             if ($lojista['id'] == $lojista_filtro) {
-                $nome_lojista = $lojista['nome'];
+                $lojista_data = $lojista;
                 break;
             }
         }
         
-        // Buscar pedidos
-        $args = array(
-            'limit' => -1,
-            'status' => array('completed', 'processing', 'on-hold', 'pending'),
-            'date_created' => $data_inicio . '...' . $data_fim,
-            'orderby' => 'date',
-            'order' => 'DESC'
-        );
-        
-        // Filtro por lojista específico
-        if (!empty($lojista_filtro) && $lojista_filtro !== 'todos') {
-            $args['meta_query'] = array(
-                array(
-                    'key' => '_lojista_id',
-                    'value' => $lojista_filtro,
-                    'compare' => '='
-                )
-            );
+        if (!$lojista_data) {
+            wp_die('Lojista não encontrado.');
         }
         
-        $pedidos = wc_get_orders($args);
+        // Buscar vendas detalhadas via API do lojista
+        $vendas_detalhadas = $this->buscar_vendas_detalhadas_lojista($lojista_data, $data_inicio, $data_fim);
+        
+        if (!$vendas_detalhadas['success'] || empty($vendas_detalhadas['data']['items'])) {
+            wp_die('Nenhuma venda encontrada para o período selecionado.');
+        }
+        
+        $pedidos = $vendas_detalhadas['data']['items'];
         
         if ($formato === 'csv') {
-            $nome_arquivo = sanitize_file_name("vendas-{$nome_lojista}-" . date('Y-m-d') . '.csv');
+            $nome_arquivo = sanitize_file_name("vendas-{$lojista_data['nome']}-" . date('Y-m-d') . '.csv');
             
             header('Content-Type: text/csv; charset=utf-8');
             header('Content-Disposition: attachment; filename="' . $nome_arquivo . '"');
@@ -4423,7 +4414,7 @@ class Sincronizador_WooCommerce {
                 'Status'
             ));
             
-            // Dados dos pedidos
+            // Dados dos pedidos da API
             foreach ($pedidos as $pedido) {
                 $status_labels = array(
                     'completed' => 'Concluído',
@@ -4435,19 +4426,15 @@ class Sincronizador_WooCommerce {
                     'failed' => 'Falhou'
                 );
                 
-                $status = $pedido->get_status();
+                $status = isset($pedido['status']) ? $pedido['status'] : 'unknown';
                 $status_nome = isset($status_labels[$status]) ? $status_labels[$status] : ucfirst($status);
                 
-                $data_pedido = $pedido->get_date_created();
+                // Formatar data
                 $data_formatada = '';
-                
-                if ($data_pedido) {
+                if (isset($pedido['date_created'])) {
                     try {
-                        if (method_exists($data_pedido, 'date')) {
-                            $data_formatada = $data_pedido->date('d/m/Y H:i');
-                        } else {
-                            $data_formatada = $data_pedido->format('d/m/Y H:i');
-                        }
+                        $data_obj = new DateTime($pedido['date_created']);
+                        $data_formatada = $data_obj->format('d/m/Y H:i');
                     } catch (Exception $e) {
                         $data_formatada = date('d/m/Y H:i');
                     }
@@ -4456,26 +4443,42 @@ class Sincronizador_WooCommerce {
                 }
                 
                 // Obter produtos do pedido
-                $items = $pedido->get_items();
                 $produtos_detalhes = array();
                 
-                foreach ($items as $item) {
-                    $product = $item->get_product();
-                    $produto_nome = $product ? $product->get_name() : $item->get_name();
-                    $quantidade = $item->get_quantity();
-                    $produtos_detalhes[] = "{$produto_nome} (x{$quantidade})";
+                if (isset($pedido['line_items']) && is_array($pedido['line_items'])) {
+                    foreach ($pedido['line_items'] as $item) {
+                        $produto_nome = isset($item['name']) ? $item['name'] : 'Produto';
+                        $quantidade = isset($item['quantity']) ? intval($item['quantity']) : 1;
+                        $produtos_detalhes[] = "{$produto_nome} (x{$quantidade})";
+                    }
                 }
                 
-                $produtos_texto = !empty($produtos_detalhes) ? implode(', ', $produtos_detalhes) : $pedido->get_item_count() . ' itens';
+                $produtos_texto = !empty($produtos_detalhes) ? implode(', ', $produtos_detalhes) : 'Produtos não disponíveis';
+                
+                // Dados do cliente
+                $cliente_nome = '';
+                if (isset($pedido['billing']['first_name']) && isset($pedido['billing']['last_name'])) {
+                    $cliente_nome = trim($pedido['billing']['first_name'] . ' ' . $pedido['billing']['last_name']);
+                }
+                
+                $cliente_email = isset($pedido['billing']['email']) ? $pedido['billing']['email'] : '';
+                
+                // Número do pedido
+                $numero_pedido = isset($pedido['number']) ? '#' . $pedido['number'] : 
+                                (isset($pedido['id']) ? '#' . $pedido['id'] : '#N/A');
+                
+                // Valor total
+                $valor_total = isset($pedido['total']) ? floatval($pedido['total']) : 0;
+                $valor_formatado = 'R$ ' . number_format($valor_total, 2, ',', '.');
                 
                 fputcsv($output, array(
                     $data_formatada,
-                    $nome_lojista,
-                    '#' . $pedido->get_order_number(),
-                    $pedido->get_billing_first_name() . ' ' . $pedido->get_billing_last_name(),
-                    $pedido->get_billing_email(),
+                    $lojista_data['nome'],
+                    $numero_pedido,
+                    $cliente_nome,
+                    $cliente_email,
                     $produtos_texto,
-                    'R$ ' . number_format($pedido->get_total(), 2, ',', '.'),
+                    $valor_formatado,
                     $status_nome
                 ));
             }
@@ -4508,7 +4511,7 @@ class Sincronizador_WooCommerce {
                 ));
             }
         } catch (Exception $e) {
-            error_log("Erro ao limpar cache dos relatórios: " . $e->getMessage());
+
             wp_send_json_error(array(
                 'message' => 'Erro ao limpar cache: ' . $e->getMessage()
             ));

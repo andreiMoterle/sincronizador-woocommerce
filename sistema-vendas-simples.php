@@ -40,7 +40,7 @@ function sincronizador_criar_tabela_vendas() {
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
     dbDelta($sql);
     
-    error_log("SINCRONIZADOR VENDAS - Tabela criada/atualizada: $table_name");
+
 }
 
 // Criar tabela na ativação do tema ou quando necessário
@@ -55,7 +55,7 @@ function sincronizador_atualizar_vendas_produto($produto_id) {
     
     $table_name = $wpdb->prefix . 'sincronizador_vendas';
     
-    error_log("SINCRONIZADOR VENDAS - Atualizando vendas para produto: $produto_id");
+
     
     $produto = wc_get_product($produto_id);
     if (!$produto) {
@@ -77,7 +77,7 @@ function sincronizador_atualizar_vendas_produto($produto_id) {
             array('%d', '%s', '%d', '%s')
         );
         
-        error_log("SINCRONIZADOR VENDAS - Produto simples $produto_id: $total_vendas vendas");
+
         
     } else if ($produto->is_type('variable')) {
         // Produto variável - calcular total e por variação
@@ -128,7 +128,7 @@ function sincronizador_atualizar_vendas_produto($produto_id) {
                 array('%d', '%d', '%d', '%s')
             );
             
-            error_log("SINCRONIZADOR VENDAS - Variação $variacao_id: $vendas_variacao vendas - $atributos");
+
         }
         
         // Salvar total do produto variável
@@ -143,7 +143,7 @@ function sincronizador_atualizar_vendas_produto($produto_id) {
             array('%d', '%s', '%d', '%s')
         );
         
-        error_log("SINCRONIZADOR VENDAS - Produto variável $produto_id: $total_vendas_produto vendas totais");
+
     }
 }
 
@@ -194,7 +194,7 @@ add_action('sincronizador_atualizar_vendas_diario', function() {
         }
     }
     
-    error_log("SINCRONIZADOR VENDAS - Atualização diária concluída: " . count($produtos_vendidos) . " produtos");
+
 });
 
 // ========================================
@@ -222,7 +222,7 @@ function sincronizador_get_vendas_simples($request) {
     $produto_id = $request['produto_id'];
     $table_name = $wpdb->prefix . 'sincronizador_vendas';
     
-    error_log("SINCRONIZADOR VENDAS SIMPLES - Consultando produto: $produto_id");
+
     
     // Buscar dados da tabela
     $vendas_data = $wpdb->get_results($wpdb->prepare("
@@ -275,7 +275,7 @@ function sincronizador_get_vendas_simples($request) {
         $response['vendas_por_variacao'] = $vendas_por_variacao;
     }
     
-    error_log("SINCRONIZADOR VENDAS SIMPLES - Resposta: " . json_encode($response));
+
     
     return $response;
 }
@@ -328,5 +328,5 @@ add_action('admin_notices', function() {
 
 // Log de sistema carregado apenas em debug mode
 if (defined('WP_DEBUG') && WP_DEBUG) {
-    error_log("SINCRONIZADOR VENDAS - Sistema carregado com sucesso!");
+
 }

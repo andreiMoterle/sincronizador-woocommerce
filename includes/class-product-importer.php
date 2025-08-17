@@ -45,7 +45,7 @@ class Sincronizador_WC_Product_Importer {
         
         $preco_final = floatval($preco_original) * (1 + ($percentual / 100));
         
-        error_log("*** PERCENTUAL APLICADO: Preço original: {$preco_original}, Percentual: {$percentual}%, Preço final: {$preco_final} ***");
+
         
         return number_format($preco_final, 2, '.', '');
     }
@@ -62,14 +62,14 @@ class Sincronizador_WC_Product_Importer {
         $invalid_domains = array('.test', '.local', 'localhost', '127.0.0.1', '::1');
         foreach ($invalid_domains as $invalid) {
             if (strpos($url, $invalid) !== false) {
-                error_log("*** URL REJEITADA (DOMÍNIO LOCAL): {$url} ***");
+
                 return false;
             }
         }
         
         // Aceitar apenas HTTP/HTTPS
         if (!preg_match('/^https?:\/\//', $url)) {
-            error_log("*** URL REJEITADA (PROTOCOLO INVÁLIDO): {$url} ***");
+
             return false;
         }
         
@@ -133,39 +133,39 @@ class Sincronizador_WC_Product_Importer {
      * Importa produto para lojista
      */
     public function importar_produto_para_lojista($produto, $lojista, $opcoes = array()) {
-        error_log("*** SINCRONIZADOR-WC EXECUTANDO - VERSÃO 2.0 ***");
-        error_log("*** TESTE IDENTIFICAÇÃO DO PLUGIN ***");
+
+
         
         $sku_produto = $produto['sku'] ?? '';
         
-        error_log("=== INICIANDO IMPORTAÇÃO ===");
-        error_log("Produto: " . $produto['nome']);
-        error_log("SKU: " . $sku_produto);
-        error_log("Destino: " . $lojista['url']);
+
+
+
+
         
         // VERIFICAÇÃO SIMPLES: Se tem SKU, verificar se já existe
         if (!empty($sku_produto)) {
-            error_log("VERIFICANDO se produto SKU '$sku_produto' já existe...");
+
             $produto_existente_id = $this->verificar_produto_existente($sku_produto, $lojista);
             if ($produto_existente_id) {
-                error_log("*** PRODUTO PULADO AUTOMATICAMENTE - SKU '{$sku_produto}' JÁ EXISTE ***");
+
                 return array(
                     'success' => true,
                     'skipped' => true,
                     'message' => 'Produto "' . $produto['nome'] . '" pulado automaticamente (já existe)'
                 );
             }
-            error_log("Produto SKU '$sku_produto' NÃO existe - continuando criação...");
+
         } else {
-            error_log("SKU vazio - não pode verificar duplicação");
+
         }
         
         // Produto não existe - criar novo
-        error_log("CRIANDO PRODUTO - SKU '{$sku_produto}' não existe no destino");
+
         
         $produto_wc = wc_get_product($produto['id']);
         if (!$produto_wc) {
-            error_log("ERRO - Produto WooCommerce não encontrado: ID " . $produto['id']);
+
             return array(
                 'success' => false,
                 'message' => 'Produto não encontrado: ID ' . $produto['id']
@@ -184,14 +184,14 @@ class Sincronizador_WC_Product_Importer {
         );
         
         if ($result['success']) {
-            error_log("PRODUTO CRIADO COM SUCESSO - ID: " . $result['product_id']);
+
             return array(
                 'success' => true,
                 'product_id' => $result['product_id'],
                 'message' => 'Produto "' . $produto['nome'] . '" criado com sucesso'
             );
         } else {
-            error_log("ERRO AO CRIAR PRODUTO: " . $result['message']);
+
             return array(
                 'success' => false,
                 'message' => 'Erro ao criar "' . $produto['nome'] . '": ' . $result['message']
@@ -257,7 +257,7 @@ class Sincronizador_WC_Product_Importer {
             // Aplicar percentual específico para este lojista se fornecido
             if (isset($percentuais[$lojista_id]) && is_numeric($percentuais[$lojista_id])) {
                 $lojista['percentual_acrescimo'] = floatval($percentuais[$lojista_id]);
-                error_log("*** PERCENTUAL ESPECÍFICO APLICADO - Lojista {$lojista['nome']}: {$lojista['percentual_acrescimo']}% ***");
+
             }
             
             // Criar produto estruturado
@@ -339,12 +339,12 @@ class Sincronizador_WC_Product_Importer {
         if ($percentual_acrescimo > 0) {
             // Aplicar percentual temporariamente ao lojista para esta importação
             $lojista['percentual_acrescimo'] = $percentual_acrescimo;
-            error_log("*** PERCENTUAL GLOBAL APLICADO: {$percentual_acrescimo}% para lojista {$lojista['nome']} ***");
+
         }
 
         foreach ($produtos_para_importar as $index => $produto) {
             $produto_numero = $index + 1;
-            error_log("PROCESSANDO produto {$produto_numero}/{" . count($produtos_para_importar) . "} - SKU: " . ($produto['sku'] ?? 'sem SKU'));
+
             
             $result = $this->importar_produto_para_lojista($produto, $lojista, $opcoes);
             
@@ -517,7 +517,7 @@ class Sincronizador_WC_Product_Importer {
      */
     public function montar_dados_produto($produto, $opcoes = array(), $lojista_data = null) {
         // Log das opções recebidas
-        error_log('IMPORTAÇÃO DEBUG - Opções recebidas: ' . print_r($opcoes, true));
+
         
         $dados = array(
             'name' => $produto->get_name(),
@@ -550,7 +550,7 @@ class Sincronizador_WC_Product_Importer {
         
         // Categorias
         $categorias = wp_get_post_terms($produto->get_id(), 'product_cat');
-        error_log('IMPORTAÇÃO DEBUG - Categorias encontradas: ' . print_r($categorias, true));
+
         if (!empty($categorias)) {
             $dados['categories'] = array();
             foreach ($categorias as $categoria) {
@@ -558,11 +558,11 @@ class Sincronizador_WC_Product_Importer {
                     'name' => $categoria->name,
                     'slug' => $categoria->slug
                 );
-                error_log('IMPORTAÇÃO DEBUG - Categoria adicionada: ' . $categoria->name . ' (slug: ' . $categoria->slug . ')');
+
             }
-            error_log('IMPORTAÇÃO DEBUG - Total de categorias a serem enviadas: ' . count($dados['categories']));
+
         } else {
-            error_log('IMPORTAÇÃO DEBUG - Nenhuma categoria encontrada para o produto');
+
         }
 
         // Marcas (brands) - tentar diferentes taxonomias
@@ -570,7 +570,7 @@ class Sincronizador_WC_Product_Importer {
         $marcas_encontradas = array();
         $debug_info = "Produto ID: " . $produto->get_id() . " | ";
         
-        error_log("IMPORTAÇÃO DEBUG - Iniciando busca de marcas para produto ID: " . $produto->get_id());
+
         
         foreach ($taxonomias_marca as $taxonomia) {
             $marcas = wp_get_post_terms($produto->get_id(), $taxonomia);
@@ -579,12 +579,12 @@ class Sincronizador_WC_Product_Importer {
             if (!empty($marcas) && !is_wp_error($marcas)) {
                 $marcas_encontradas = $marcas;
                 $debug_info .= "✅ ENCONTROU: " . $marcas[0]->name . " | ";
-                error_log("IMPORTAÇÃO DEBUG - SUCESSO! Marcas encontradas na taxonomia '{$taxonomia}': " . $marcas[0]->name);
+
                 break;
             }
         }
         
-        error_log("IMPORTAÇÃO DEBUG - Resumo: " . $debug_info);
+
         
         if (!empty($marcas_encontradas)) {
             $dados['brands'] = array();
@@ -593,16 +593,16 @@ class Sincronizador_WC_Product_Importer {
                     'name' => $marca->name,
                     'slug' => $marca->slug
                 );
-                error_log('IMPORTAÇÃO DEBUG - Marca adicionada: ' . $marca->name . ' (slug: ' . $marca->slug . ')');
+
             }
-            error_log('IMPORTAÇÃO DEBUG - Total de marcas a serem enviadas: ' . count($dados['brands']));
+
         } else {
-            error_log('IMPORTAÇÃO DEBUG - Nenhuma marca encontrada para o produto');
+
         }
         
         // Imagens se solicitado
         if (isset($opcoes['incluir_imagens']) && $opcoes['incluir_imagens']) {
-            error_log('IMPORTAÇÃO DEBUG - Processando imagens para produto: ' . $produto->get_name());
+
             $images = array();
             
             // Imagem principal
@@ -610,33 +610,33 @@ class Sincronizador_WC_Product_Importer {
                 $image_url = wp_get_attachment_image_url($produto->get_image_id(), 'full');
                 if ($image_url && $this->is_valid_external_url($image_url)) {
                     $images[] = array('src' => $image_url);
-                    error_log('IMPORTAÇÃO DEBUG - Imagem principal adicionada: ' . $image_url);
+
                 } else {
-                    error_log('IMPORTAÇÃO DEBUG - Imagem principal ignorada (URL inválida): ' . $image_url);
+
                 }
             }
             
             // Galeria
             $gallery_ids = $produto->get_gallery_image_ids();
-            error_log('IMPORTAÇÃO DEBUG - IDs da galeria: ' . print_r($gallery_ids, true));
+
             foreach ($gallery_ids as $image_id) {
                 $image_url = wp_get_attachment_image_url($image_id, 'full');
                 if ($image_url && $this->is_valid_external_url($image_url)) {
                     $images[] = array('src' => $image_url);
-                    error_log('IMPORTAÇÃO DEBUG - Imagem da galeria adicionada: ' . $image_url);
+
                 } else {
-                    error_log('IMPORTAÇÃO DEBUG - Imagem da galeria ignorada (URL inválida): ' . $image_url);
+
                 }
             }
             
             if (!empty($images)) {
                 $dados['images'] = $images;
-                error_log('IMPORTAÇÃO DEBUG - Total de imagens a serem enviadas: ' . count($images));
+
             } else {
-                error_log('IMPORTAÇÃO DEBUG - Nenhuma imagem válida encontrada (URLs de desenvolvimento puladas)');
+
             }
         } else {
-            error_log('IMPORTAÇÃO DEBUG - Incluir imagens está DESABILITADO ou não foi passado');
+
         }
         
         // Atributos
@@ -677,9 +677,9 @@ class Sincronizador_WC_Product_Importer {
         
         // Variações se for produto variável e solicitado
         if ($produto->is_type('variable') && isset($opcoes['incluir_variacoes']) && $opcoes['incluir_variacoes']) {
-            error_log('IMPORTAÇÃO DEBUG - Processando variações para produto variável: ' . $produto->get_name());
+
             $variation_ids = $produto->get_children();
-            error_log('IMPORTAÇÃO DEBUG - IDs das variações encontradas: ' . print_r($variation_ids, true));
+
             
             // IMPORTANTE: As variações não devem ser incluídas no array principal do produto
             // Elas serão criadas separadamente após o produto principal ser criado
@@ -704,7 +704,7 @@ class Sincronizador_WC_Product_Importer {
                                 'option' => $attribute_value
                             );
                             
-                            error_log("*** ATRIBUTO VARIAÇÃO - Nome: {$clean_attribute_name}, Valor: {$attribute_value} ***");
+
                         }
                     }
                     
@@ -717,16 +717,16 @@ class Sincronizador_WC_Product_Importer {
                         // Gerar SKU único: SKU original + timestamp + index da variação
                         $unique_sku = $original_sku . '-' . time() . '-' . ($index + 1);
                         $variation_data['sku'] = $unique_sku;
-                        error_log('*** VARIAÇÃO COM SKU ÚNICO GERADO: ' . $unique_sku . ' ***');
+
                     } else {
                         // Se não tem SKU, gerar um baseado no produto pai + timestamp
                         $produto_sku = $produto->get_sku();
                         if (!empty($produto_sku)) {
                             $unique_sku = $produto_sku . '-VAR-' . time() . '-' . ($index + 1);
                             $variation_data['sku'] = $unique_sku;
-                            error_log('*** VARIAÇÃO SEM SKU ORIGINAL - GERADO: ' . $unique_sku . ' ***');
+
                         } else {
-                            error_log('*** VARIAÇÃO SEM SKU - DEIXANDO VAZIA ***');
+
                             // Não incluir SKU - deixar WooCommerce gerar
                         }
                     }
@@ -754,29 +754,29 @@ class Sincronizador_WC_Product_Importer {
                         $image_url = wp_get_attachment_url($variation_image_id);
                         if ($image_url && $this->is_valid_external_url($image_url)) {
                             $variation_data['image'] = array('src' => $image_url);
-                            error_log("*** VARIAÇÃO COM IMAGEM VÁLIDA: {$image_url} ***");
+
                         } else {
-                            error_log("*** VARIAÇÃO - IMAGEM IGNORADA (URL INVÁLIDA): {$image_url} ***");
+
                         }
                     }
                     
                     $dados['_variations_data'][] = $variation_data;
-                    error_log('*** VARIAÇÃO PROCESSADA - DADOS: ' . print_r($variation_data, true) . ' ***');
-                    error_log('IMPORTAÇÃO DEBUG - Atributos da variação: ' . print_r($attributes_array, true));
+
+
                 }
             }
             
-            error_log('IMPORTAÇÃO DEBUG - Total de variações a serem criadas separadamente: ' . count($dados['_variations_data']));
+
         } else {
             if ($produto->is_type('variable')) {
-                error_log('IMPORTAÇÃO DEBUG - Produto é variável mas incluir_variacoes está DESABILITADO');
+
             } else {
-                error_log('IMPORTAÇÃO DEBUG - Produto não é variável (tipo: ' . $produto->get_type() . ')');
+
             }
         }
         
         // Log dos dados finais
-        error_log('IMPORTAÇÃO DEBUG - Dados finais do produto a serem enviados: ' . print_r($dados, true));
+
         
         return $dados;
     }
@@ -786,15 +786,15 @@ class Sincronizador_WC_Product_Importer {
      */
     public function verificar_produto_existente($sku, $lojista_data) {
         if (empty($sku)) {
-            error_log('*** VERIFICAÇÃO FALHADA - SKU VAZIO ***');
+
             return null;
         }
         
-        error_log("*** VERIFICAÇÃO DE DUPLICATA - SKU: {$sku} ***");
-        error_log("*** URL DESTINO: " . $lojista_data['url'] . " ***");
+
+
         
         $url = trailingslashit($lojista_data['url']) . 'wp-json/wc/v3/products?sku=' . urlencode($sku);
-        error_log("*** URL CONSULTA: {$url} ***");
+
         
         $response = wp_remote_get($url, array(
             'headers' => array(
@@ -804,25 +804,25 @@ class Sincronizador_WC_Product_Importer {
         ));
         
         if (is_wp_error($response)) {
-            error_log('*** ERRO - Verificação produto existente: ' . $response->get_error_message() . ' ***');
+
             return null;
         }
         
         $response_code = wp_remote_retrieve_response_code($response);
-        error_log("*** CÓDIGO RESPOSTA: {$response_code} ***");
+
         
         $body_raw = wp_remote_retrieve_body($response);
-        error_log("*** RESPOSTA RAW: " . substr($body_raw, 0, 500) . " ***");
+
         
         $body = json_decode($body_raw, true);
         if (!empty($body) && is_array($body) && count($body) > 0) {
-            error_log('*** PRODUTO JÁ EXISTE - SKU: ' . $sku . ' (ID: ' . $body[0]['id'] . ') ***');
-            error_log('*** RETORNANDO ID PARA PULAR: ' . $body[0]['id'] . ' ***');
+
+
             return $body[0]['id'];
         }
         
-        error_log('*** PRODUTO NÃO EXISTE - SKU: ' . $sku . ' (será criado) ***');
-        error_log('*** RETORNANDO NULL PARA CRIAR ***');
+
+
         return null;
     }
 
@@ -893,18 +893,18 @@ class Sincronizador_WC_Product_Importer {
         
         // Criar variações se necessário
         if ($variations_data && $product_id) {
-            error_log("*** INICIANDO PROCESSO DE CRIAÇÃO DE VARIAÇÕES ***");
-            error_log("*** PRODUTO PRINCIPAL CRIADO - ID: {$product_id} ***");
-            error_log("*** QUANTIDADE DE VARIAÇÕES A CRIAR: " . count($variations_data) . " ***");
+
+
+
             
             $variations_result = $this->criar_variacoes_produto($destino_url, $consumer_key, $consumer_secret, $product_id, $variations_data);
             
             if ($variations_result['success']) {
                 $result['message'] .= ' com ' . $variations_result['created_count'] . ' variações criadas';
-                error_log("*** VARIAÇÕES CRIADAS COM SUCESSO: " . $variations_result['created_count'] . " ***");
+
             } else {
                 $result['message'] .= ' mas falhou ao criar ' . (count($variations_data) - $variations_result['created_count']) . ' variações';
-                error_log("*** FALHA NA CRIAÇÃO DE VARIAÇÕES: " . $variations_result['message'] . " ***");
+
                 
                 // Incluir detalhes dos erros no resultado
                 if (isset($variations_result['errors'])) {
@@ -917,9 +917,9 @@ class Sincronizador_WC_Product_Importer {
             $result['variations_total'] = count($variations_data);
         } else {
             if (!$variations_data) {
-                error_log("*** PRODUTO NÃO TEM VARIAÇÕES PARA CRIAR ***");
+
             } else {
-                error_log("*** ERRO: PRODUTO PRINCIPAL NÃO FOI CRIADO (ID: {$product_id}) ***");
+
             }
         }
         
@@ -934,25 +934,25 @@ class Sincronizador_WC_Product_Importer {
         $errors = array();
         $skipped_count = 0;
         
-        error_log("*** INICIANDO CRIAÇÃO DE VARIAÇÕES ***");
-        error_log("*** PRODUTO ID NO DESTINO: {$product_id} ***");
-        error_log("*** TOTAL DE VARIAÇÕES PARA CRIAR: " . count($variations_data) . " ***");
+
+
+
         
         foreach ($variations_data as $index => $variation_data) {
             $variation_number = $index + 1;
-            error_log("*** PROCESSANDO VARIAÇÃO {$variation_number}/" . count($variations_data) . " ***");
+
             
             // Log dos dados da variação sendo enviados
-            error_log("*** DADOS DA VARIAÇÃO {$variation_number}: " . print_r($variation_data, true) . " ***");
+
             
             if (!empty($variation_data['sku'])) {
-                error_log("*** VARIAÇÃO {$variation_number} COM SKU: '{$variation_data['sku']}' ***");
+
             } else {
-                error_log("*** VARIAÇÃO {$variation_number} SEM SKU ***");
+
             }
             
             $url = trailingslashit($destino_url) . 'wp-json/wc/v3/products/' . $product_id . '/variations';
-            error_log("*** URL CRIAÇÃO VARIAÇÃO: {$url} ***");
+
             
             $response = wp_remote_post($url, array(
                 'headers' => array(
@@ -965,7 +965,7 @@ class Sincronizador_WC_Product_Importer {
             
             if (is_wp_error($response)) {
                 $error_msg = "Erro ao criar variação {$variation_number}: " . $response->get_error_message();
-                error_log("*** ERRO WP_ERROR - VARIAÇÃO {$variation_number}: " . $response->get_error_message() . " ***");
+
                 $errors[] = $error_msg;
                 continue;
             }
@@ -973,12 +973,12 @@ class Sincronizador_WC_Product_Importer {
             $response_code = wp_remote_retrieve_response_code($response);
             $response_body = wp_remote_retrieve_body($response);
             
-            error_log("*** RESPOSTA CRIAÇÃO VARIAÇÃO {$variation_number} - CÓDIGO: {$response_code} ***");
-            error_log("*** RESPOSTA CRIAÇÃO VARIAÇÃO {$variation_number} - BODY: " . substr($response_body, 0, 500) . " ***");
+
+
             
             if ($response_code >= 300) {
                 $error_msg = "Erro HTTP {$response_code} ao criar variação {$variation_number}: {$response_body}";
-                error_log("*** ERRO HTTP {$response_code} - VARIAÇÃO {$variation_number}: {$response_body} ***");
+
                 $errors[] = $error_msg;
                 continue;
             }
@@ -987,31 +987,31 @@ class Sincronizador_WC_Product_Importer {
             $response_data = json_decode($response_body, true);
             if ($response_data && isset($response_data['id'])) {
                 $created_count++;
-                error_log("*** VARIAÇÃO {$variation_number} CRIADA COM SUCESSO - ID: {$response_data['id']} ***");
+
                 
                 // Log adicional dos dados da variação criada
                 if (!empty($response_data['sku'])) {
-                    error_log("*** VARIAÇÃO CRIADA COM SKU: '{$response_data['sku']}' ***");
+
                 }
                 if (!empty($response_data['attributes'])) {
-                    error_log("*** VARIAÇÃO CRIADA COM ATRIBUTOS: " . print_r($response_data['attributes'], true) . " ***");
+
                 }
             } else {
                 $error_msg = "Resposta inválida ao criar variação {$variation_number}: sem ID na resposta";
-                error_log("*** ERRO RESPOSTA INVÁLIDA - VARIAÇÃO {$variation_number}: sem ID na resposta ***");
+
                 $errors[] = $error_msg;
                 continue;
             }
         }
         
         $total_variations = count($variations_data);
-        error_log("*** RESULTADO FINAL CRIAÇÃO VARIAÇÕES ***");
-        error_log("*** TOTAL TENTATIVAS: {$total_variations} ***");
-        error_log("*** CRIADAS COM SUCESSO: {$created_count} ***");
-        error_log("*** ERROS: " . count($errors) . " ***");
+
+
+
+
         
         if (!empty($errors)) {
-            error_log("*** DETALHES DOS ERROS: " . print_r($errors, true) . " ***");
+
         }
         
         $message_parts = array();
@@ -1057,16 +1057,16 @@ class Sincronizador_WC_Product_Importer {
             $categoria_id = $this->buscar_categoria_por_slug($destino_url, $consumer_key, $consumer_secret, $categoria_data['slug']);
             
             if ($categoria_id) {
-                error_log('IMPORTAÇÃO DEBUG - Categoria encontrada no destino: ' . $categoria_data['name'] . ' (ID: ' . $categoria_id . ')');
+
                 $categorias_resolvidas[] = array('id' => $categoria_id);
             } else {
                 // Criar nova categoria
                 $nova_categoria_id = $this->criar_categoria_destino($destino_url, $consumer_key, $consumer_secret, $categoria_data);
                 if ($nova_categoria_id) {
-                    error_log('IMPORTAÇÃO DEBUG - Categoria criada no destino: ' . $categoria_data['name'] . ' (ID: ' . $nova_categoria_id . ')');
+
                     $categorias_resolvidas[] = array('id' => $nova_categoria_id);
                 } else {
-                    error_log('IMPORTAÇÃO DEBUG - Falha ao criar categoria no destino: ' . $categoria_data['name']);
+
                 }
             }
         }
@@ -1142,7 +1142,7 @@ class Sincronizador_WC_Product_Importer {
             $atributo_id = $this->buscar_atributo_por_nome($destino_url, $consumer_key, $consumer_secret, $nome_atributo);
             
             if ($atributo_id) {
-                error_log("IMPORTAÇÃO DEBUG - Atributo encontrado no destino: {$nome_atributo} (ID: {$atributo_id})");
+
                 
                 // ** CORREÇÃO CRÍTICA: CONECTAR COM TAXONOMIA EXISTENTE **
                 $atributos_resolvidos[] = array(
@@ -1153,7 +1153,7 @@ class Sincronizador_WC_Product_Importer {
                     'variation' => $atributo_data['variation']
                 );
             } else {
-                error_log("IMPORTAÇÃO DEBUG - Atributo NÃO encontrado no destino: {$nome_atributo} - criando como local");
+
                 
                 // Se não encontrar, criar como atributo local (comportamento atual)
                 $atributos_resolvidos[] = $atributo_data;
@@ -1178,7 +1178,7 @@ class Sincronizador_WC_Product_Importer {
         ));
         
         if (is_wp_error($response)) {
-            error_log("IMPORTAÇÃO DEBUG - Erro ao buscar atributos: " . $response->get_error_message());
+
             return false;
         }
         
@@ -1193,13 +1193,13 @@ class Sincronizador_WC_Product_Importer {
                 if (strtolower($nome_limpo) === strtolower($nome_destino_limpo) || 
                     strtolower($nome_atributo) === strtolower($atributo['name']) ||
                     strtolower($nome_atributo) === strtolower($atributo['slug'])) {
-                    error_log("IMPORTAÇÃO DEBUG - Correspondência encontrada: {$nome_atributo} -> {$atributo['name']} (ID: {$atributo['id']})");
+
                     return $atributo['id'];
                 }
             }
         }
         
-        error_log("IMPORTAÇÃO DEBUG - Atributo '{$nome_atributo}' não encontrado no destino");
+
         return false;
     }
     
@@ -1276,7 +1276,7 @@ class Sincronizador_WC_Product_Importer {
      * Resolver marcas no destino
      */
     private function resolver_marcas_destino($destino_url, $consumer_key, $consumer_secret, $marcas) {
-        error_log("IMPORTAÇÃO DEBUG - resolver_marcas_destino() chamada com " . count($marcas) . " marcas");
+
         
         $marcas_resolvidas = array();
         
@@ -1285,16 +1285,16 @@ class Sincronizador_WC_Product_Importer {
             $marca_id = $this->buscar_marca_por_slug($destino_url, $consumer_key, $consumer_secret, $marca_data['slug']);
             
             if ($marca_id) {
-                error_log('IMPORTAÇÃO DEBUG - Marca encontrada no destino: ' . $marca_data['name'] . ' (ID: ' . $marca_id . ')');
+
                 $marcas_resolvidas[] = array('id' => $marca_id);
             } else {
                 // Criar nova marca
                 $nova_marca_id = $this->criar_marca_destino($destino_url, $consumer_key, $consumer_secret, $marca_data);
                 if ($nova_marca_id) {
-                    error_log('IMPORTAÇÃO DEBUG - Marca criada no destino: ' . $marca_data['name'] . ' (ID: ' . $nova_marca_id . ')');
+
                     $marcas_resolvidas[] = array('id' => $nova_marca_id);
                 } else {
-                    error_log('IMPORTAÇÃO DEBUG - Falha ao criar marca no destino: ' . $marca_data['name']);
+
                 }
             }
         }

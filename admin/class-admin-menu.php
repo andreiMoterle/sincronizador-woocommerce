@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
 class Sincronizador_WC_Admin_Menu {
     
     public function __construct() {
-        error_log('DEBUG: Sincronizador_WC_Admin_Menu construtor chamado');
+
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_init', array($this, 'admin_init'));
     }
@@ -19,7 +19,7 @@ class Sincronizador_WC_Admin_Menu {
      * Adiciona menus do admin
      */
     public function add_admin_menu() {
-        error_log('DEBUG: add_admin_menu() chamado');
+
         // Menu principal
         add_menu_page(
             __('Sincronizador WC', 'sincronizador-wc'),
@@ -216,7 +216,7 @@ class Sincronizador_WC_Admin_Menu {
      */
     public function relatorios_page() {
         // Debug: verificar se o método está sendo chamado
-        error_log('DEBUG: relatorios_page() foi chamado');
+
         
         // Carregar estilos e scripts específicos da página de relatórios
         wp_enqueue_script('chart-js', 'https://cdn.jsdelivr.net/npm/chart.js', array(), '3.9.1', true);
@@ -231,8 +231,8 @@ class Sincronizador_WC_Admin_Menu {
         
         // Debug: verificar se o template existe
         $template_path = dirname(__FILE__) . '/templates/reports-page.php';
-        error_log('DEBUG: template path = ' . $template_path);
-        error_log('DEBUG: template exists = ' . (file_exists($template_path) ? 'YES' : 'NO'));
+
+
         
         // Incluir template
         if (file_exists($template_path)) {

@@ -252,15 +252,7 @@ class Sincronizador_WC_Batch_Processor {
     private function log_batch_progress($batch_id, $batch_data) {
         $progress = ($batch_data['processed_products'] / $batch_data['total_produtos']) * 100;
         
-        error_log(sprintf(
-            'Sincronizador WC - Batch %d: %d/%d produtos processados (%.2f%%) - Sucessos: %d, Falhas: %d',
-            $batch_id,
-            $batch_data['processed_products'],
-            $batch_data['total_produtos'],
-            $progress,
-            $batch_data['successful_imports'],
-            $batch_data['failed_imports']
-        ));
+        // Log removido para produção
     }
     
     /**

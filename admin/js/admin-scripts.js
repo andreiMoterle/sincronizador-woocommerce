@@ -68,8 +68,7 @@
                 initAddLojistaPage();
                 break;
             default:
-                console.log('📋 Página padrão ou dashboard');
-        }
+                }
     }
 
     /**
@@ -90,8 +89,6 @@
      * PÁGINA DE LOJISTAS
      */
     function initLojistasPage() {
-        console.log('📋 Inicializando página de lojistas');
-        
         // Preparar botões de sincronização
         $('form input[name="action"][value="sync_produtos"]').each(function() {
             const form = $(this).closest('form');
@@ -108,8 +105,6 @@
      * PÁGINA DE IMPORTAÇÃO
      */
     function initImportPage() {
-        console.log('📥 Inicializando página de importação');
-        
         // Configurar valores padrão das checkboxes
         setTimeout(() => {
             $("#incluir_variacoes, #incluir_imagens, #manter_precos").prop("checked", true);
@@ -120,8 +115,6 @@
      * PÁGINA DE PRODUTOS SINCRONIZADOS
      */
     function initSyncPage() {
-        console.log('📊 Inicializando página de produtos sincronizados');
-        
         // 🚀 OTIMIZAÇÃO: Busca em tempo real com debounce para melhor performance
         let searchTimeout;
         $(document).on('input', '#buscar-sincronizado', function() {
@@ -142,7 +135,6 @@
         setTimeout(() => {
             const lojistaId = $("#lojista_destino").val();
             if (lojistaId) {
-                console.log('🔄 Lojista já selecionado na página de sincronizados, carregando produtos automaticamente...');
                 carregarProdutosSincronizados(lojistaId);
             }
         }, 500); // Pequeno delay para garantir que a página carregou completamente
@@ -152,8 +144,7 @@
      * PÁGINA DE ADICIONAR LOJISTA
      */
     function initAddLojistaPage() {
-        console.log('➕ Inicializando página de adicionar lojista');
-    }
+        }
 
     /**
      * EVENTOS GLOBAIS
@@ -200,20 +191,17 @@
         // Selecionar todos os produtos
         $(document).on('change', '#selecionar-todos', function() {
             const isChecked = $(this).is(':checked');
-            console.log('📋 SELECIONAR TODOS - Estado:', isChecked);
             $("input[name='produtos_selecionados[]']").prop('checked', isChecked);
             atualizarContadorProdutos();
         });
         
         // Atualizar contador quando produtos individuais são selecionados
         $(document).on('change', "input[name='produtos_selecionados[]']", function() {
-            console.log('📋 CHECKBOX - Produto selecionado/desmarcado:', this.value, 'checked:', this.checked);
             atualizarContadorProdutos();
             
             // Atualizar estado do "selecionar todos"
             const total = $("input[name='produtos_selecionados[]']").length;
             const selecionados = $("input[name='produtos_selecionados[]']:checked").length;
-            console.log('📋 CHECKBOX - Total:', total, 'Selecionados:', selecionados);
             $('#selecionar-todos').prop('checked', total > 0 && selecionados === total);
         });
         
@@ -247,39 +235,24 @@
 
     function handleTesteConexao(e) {
         e.preventDefault();
-        console.log('🔧 HANDLE TESTE CONEXÃO - Evento disparado');
-        console.log('🔧 HANDLE TESTE CONEXÃO - Botão clicado:', this);
-        
         const lojistaId = $(this).data('lojista-id') || $('#lojista_destino').val();
-        console.log('🔧 HANDLE TESTE CONEXÃO - Lojista ID:', lojistaId);
-        
         if (!lojistaId) {
-            console.log('❌ HANDLE TESTE CONEXÃO - Nenhum lojista selecionado');
-            
             // Verificar se SincronizadorModals está disponível
             if (typeof SincronizadorModals !== 'undefined') {
                 SincronizadorModals.mostrarErro('Selecione um lojista primeiro!');
             } else {
                 alert('Selecione um lojista primeiro!');
-                console.log('⚠️ SincronizadorModals não está disponível');
-            }
+                }
             return;
         }
         
-        console.log('✅ HANDLE TESTE CONEXÃO - Chamando testarConexao');
         testarConexao(lojistaId, $(this));
     }
 
     function handleValidarLojista(e) {
         e.preventDefault();
-        console.log('🔍 VALIDAR LOJISTA - Botão clicado!');
-        
         const lojistaId = $("#lojista_destino").val();
-        console.log('🔍 VALIDAR LOJISTA - Lojista ID:', lojistaId);
-        
         if (!lojistaId) {
-            console.log('🔍 VALIDAR LOJISTA - Erro: Nenhum lojista selecionado');
-            
             if (typeof SincronizadorModals !== 'undefined') {
                 SincronizadorModals.mostrarErro('Selecione um lojista primeiro!');
             } else {
@@ -288,7 +261,7 @@
             return;
         }
         
-        console.log('🔍 VALIDAR LOJISTA - Chamando validarLojista()');
+
         validarLojista(lojistaId);
     }
 
@@ -323,8 +296,6 @@
             return;
         }
         
-        console.log('🔄 Iniciando sincronização de vendas para lojista:', lojistaId);
-        
         // Desabilitar botão durante a operação
         const btn = $(this);
         const originalText = btn.html();
@@ -341,7 +312,6 @@
             },
             success: function(response) {
                 if (response.success) {
-                    console.log('✅ Sincronização de vendas concluída:', response.data);
                     SincronizadorModals.mostrarSucesso(`✅ Vendas sincronizadas com sucesso! 
                         Vendas encontradas: ${response.data.vendas_sincronizadas || 0}`);
                     
@@ -374,8 +344,6 @@
             return;
         }
         
-        console.log('🗑️ Limpando cache para lojista:', lojistaId);
-        
         // Desabilitar botão durante a operação
         const btn = $(this);
         const originalText = btn.html();
@@ -392,7 +360,6 @@
             },
             success: function(response) {
                 if (response.success) {
-                    console.log('✅ Cache limpo com sucesso');
                     SincronizadorModals.mostrarSucesso('🗑️ Cache limpo! Recarregando produtos...');
                     
                     // Recarregar produtos sincronizados após limpar cache
@@ -417,16 +384,12 @@
 
     function handleMudancaLojista(e) {
         const lojistaId = this.value;
-        console.log('🔄 Lojista alterado:', lojistaId);
-        
         // Limpar dados anteriores
         $("#produtos-section, #opcoes-importacao, #botoes-acao").hide();
         $("#btn-carregar-produtos").prop("disabled", !lojistaId);
         
         // Habilitar/desabilitar botão de validar lojista
         $("#btn-validar-lojista").prop("disabled", !lojistaId);
-        console.log('🔄 Botão validar lojista agora está:', !lojistaId ? 'DESABILITADO' : 'HABILITADO');
-        
         // Habilitar/desabilitar botões relacionados à conexão
         $("#btn-test-connection, #btn-carregar-sincronizados, #btn-sincronizar-vendas, #btn-limpar-cache").prop("disabled", !lojistaId);
         
@@ -510,16 +473,10 @@
     }
 
     function testarConexao(lojistaId, buttonElement) {
-        console.log('🔧 TESTE CONEXÃO - Iniciando teste para lojista:', lojistaId);
-        console.log('🔧 TESTE CONEXÃO - Botão:', buttonElement);
-        console.log('🔧 TESTE CONEXÃO - WC.ajaxurl:', WC.ajaxurl);
-        console.log('🔧 TESTE CONEXÃO - WC.nonce:', WC.nonce);
-        
         // Verificar se SincronizadorModals está disponível
         if (typeof SincronizadorModals !== 'undefined') {
             SincronizadorModals.setButtonLoading(buttonElement, true);
         } else {
-            console.log('⚠️ SincronizadorModals não disponível, usando texto simples');
             buttonElement.text('Testando...').prop('disabled', true);
         }
         
@@ -529,8 +486,6 @@
             lojista_id: lojistaId
         })
         .done(function(response) {
-            console.log('🔧 TESTE CONEXÃO - Resposta recebida:', response);
-            
             if (response.success) {
                 if (typeof SincronizadorModals !== 'undefined') {
                     SincronizadorModals.showToast('✅ Conexão estabelecida com sucesso!', 'success');
@@ -540,8 +495,6 @@
                 buttonElement.text('✅ Conectado');
             } else {
                 const errorMsg = response.data || response.message || 'Erro desconhecido';
-                console.log('❌ TESTE CONEXÃO - Erro:', errorMsg);
-                
                 if (typeof SincronizadorModals !== 'undefined') {
                     SincronizadorModals.showToast('❌ Falha na conexão: ' + errorMsg, 'error');
                 } else {
@@ -551,8 +504,6 @@
             }
         })
         .fail(function(xhr, status, error) {
-            console.log('❌ TESTE CONEXÃO - Falha na requisição:', {xhr, status, error});
-            
             if (typeof SincronizadorModals !== 'undefined') {
                 SincronizadorModals.showToast('❌ Erro de comunicação com o servidor', 'error');
             } else {
@@ -570,11 +521,6 @@
     }
 
     function validarLojista(lojistaId) {
-        console.log('🔍 VALIDAR LOJISTA - Iniciando validação para ID:', lojistaId);
-        console.log('🔍 VALIDAR LOJISTA - WC.ajaxurl:', WC.ajaxurl);
-        console.log('🔍 VALIDAR LOJISTA - WC.nonce:', WC.nonce);
-        console.log('🔍 VALIDAR LOJISTA - SincronizadorModals disponível:', typeof SincronizadorModals !== 'undefined');
-        
         const btn = $("#btn-validar-lojista");
         
         // Verificar se SincronizadorModals está disponível
@@ -584,15 +530,12 @@
             btn.prop('disabled', true).text('⏳ Validando...');
         }
         
-        console.log('🔍 VALIDAR LOJISTA - Fazendo chamada AJAX...');
-        
         $.post(WC.ajaxurl, {
             action: "sincronizador_wc_validate_lojista",
             nonce: WC.nonce,
             lojista_id: lojistaId
         })
         .done(function(response) {
-            console.log('🔍 VALIDAR LOJISTA - Resposta recebida:', response);
             const statusDiv = $("#validacao-status");
             
             if (response.success) {
@@ -615,8 +558,6 @@
             }
         })
         .fail(function(xhr, status, error) {
-            console.log('🔍 VALIDAR LOJISTA - Erro na chamada AJAX:', { xhr, status, error });
-            
             if (typeof SincronizadorModals !== 'undefined') {
                 SincronizadorModals.mostrarErro('Erro de comunicação com o servidor: ' + error);
             } else {
@@ -624,8 +565,6 @@
             }
         })
         .always(function() {
-            console.log('🔍 VALIDAR LOJISTA - Finalizando...');
-            
             if (typeof SincronizadorModals !== 'undefined') {
                 SincronizadorModals.setButtonLoading(btn, false, '🔍 Validar Conexão');
             } else {
@@ -635,8 +574,6 @@
     }
 
     function carregarProdutos() {
-        console.log('📦 CARREGAR PRODUTOS - Iniciando...');
-        
         const btn = $("#btn-carregar-produtos");
         
         if (typeof SincronizadorModals !== 'undefined') {
@@ -650,7 +587,6 @@
             nonce: WC.nonce
         })
         .done(function(response) {
-            console.log('📦 CARREGAR PRODUTOS - Resposta:', response);
             if (response.success) {
                 renderProdutos(response.data);
                 showImportSections();
@@ -667,8 +603,6 @@
             }
         })
         .fail(function(xhr, status, error) {
-            console.log('📦 CARREGAR PRODUTOS - Erro AJAX:', { xhr, status, error });
-            
             if (typeof SincronizadorModals !== 'undefined') {
                 SincronizadorModals.mostrarErro('Erro de comunicação com o servidor');
             } else {
@@ -685,18 +619,12 @@
     }
 
     function iniciarImportacao() {
-        console.log('🚀 IMPORTAÇÃO - Iniciando processo de importação...');
-        
         const produtosSelecionados = [];
         $("input[name='produtos_selecionados[]']:checked").each(function() {
             produtosSelecionados.push(this.value);
         });
         
-        console.log('🚀 IMPORTAÇÃO - Produtos selecionados:', produtosSelecionados);
-        
         if (produtosSelecionados.length === 0) {
-            console.log('🚀 IMPORTAÇÃO - Erro: Nenhum produto selecionado');
-            
             if (typeof SincronizadorModals !== 'undefined') {
                 SincronizadorModals.mostrarErro('Selecione pelo menos um produto!');
             } else {
@@ -707,9 +635,6 @@
 
         const lojistaId = $("#lojista_destino").val();
         const lojistaName = $("#lojista_destino option:selected").text() || 'Lojista';
-        
-        console.log('🚀 IMPORTAÇÃO - Lojista ID:', lojistaId);
-        console.log('🚀 IMPORTAÇÃO - Lojista Nome:', lojistaName);
         
         // Mostrar modal de progresso
         if (typeof SincronizadorModals !== 'undefined') {
@@ -727,9 +652,6 @@
             percentual_acrescimo: parseFloat($("#percentual_acrescimo").val()) || 0
         };
         
-        console.log('🚀 IMPORTAÇÃO - Dados a serem enviados:', dados);
-        console.log('🚀 IMPORTAÇÃO - URL:', WC.ajaxurl);
-        
         // Simular progresso
         let progress = 0;
         const progressInterval = setInterval(() => {
@@ -739,7 +661,6 @@
         
         $.post(WC.ajaxurl, dados)
         .done(function(response) {
-            console.log('🚀 IMPORTAÇÃO - Resposta recebida:', response);
             clearInterval(progressInterval);
             SincronizadorModals.atualizarProgresso(100, 'Importação concluída!');
             
@@ -755,9 +676,6 @@
             }, 1000);
         })
         .fail(function(xhr, status, error) {
-            console.error('🚀 IMPORTAÇÃO - Erro AJAX:', { xhr, status, error });
-            console.error('🚀 IMPORTAÇÃO - Response Text:', xhr.responseText);
-            console.error('🚀 IMPORTAÇÃO - Status Code:', xhr.status);
             clearInterval(progressInterval);
             SincronizadorModals.fecharModalProgresso();
             SincronizadorModals.mostrarErro('Erro de comunicação com o servidor: ' + error);
@@ -765,14 +683,11 @@
     }
 
     function carregarProdutosSincronizados(lojistaId, forceRefresh = false) {
-        console.log('📊 Carregando produtos sincronizados - Lojista:', lojistaId, 'Force refresh:', forceRefresh);
-        
         const btn = $("#btn-carregar-sincronizados");
         SincronizadorModals.setButtonLoading(btn, true);
         
         // Verificar se já temos dados em cache e não é refresh forçado
         if (!forceRefresh && WC.produtosSincronizados && WC.produtosSincronizados.length > 0 && WC.ultimoLojistaCarregado === lojistaId) {
-            console.log('📦 Usando dados do cache frontend para velocidade');
             renderProdutosSincronizados(WC.produtosSincronizados);
             SincronizadorModals.setButtonLoading(btn, false, '📊 Carregar Sincronizados');
             SincronizadorModals.showToast('📦 Dados carregados do cache (mais rápido)', 'info');
@@ -789,8 +704,7 @@
         if (forceRefresh) {
             requestData.cache_bust = new Date().getTime();
             requestData.force_refresh = true;
-            console.log('🔄 Forçando refresh do cache no servidor');
-        }
+            }
         
         $.post(WC.ajaxurl, requestData)
         .done(function(response) {
@@ -866,8 +780,6 @@
 
     // Funções que serão implementadas conforme necessário
     function renderProdutos(produtos) {
-        console.log('📦 Renderizando produtos:', produtos.length);
-        
         const grid = $('#produtos-grid');
         const resumo = $('#produtos-resumo');
         
@@ -922,18 +834,14 @@
         const selecionados = $("input[name='produtos_selecionados[]']:checked").length;
         const total = $("input[name='produtos_selecionados[]']").length;
         
-        console.log('📊 CONTADOR - Produtos selecionados:', selecionados, 'de', total);
-        
         $('#produtos-count').text(`${selecionados} de ${total} produtos selecionados`);
         
         // Habilitar/desabilitar botão de importação (ID correto)
         const btnImportar = $('#btn-iniciar-importacao');
         if (btnImportar.length) {
-            console.log('📊 CONTADOR - Botão encontrado, habilitando/desabilitando...');
             btnImportar.prop('disabled', selecionados === 0);
         } else {
-            console.log('📊 CONTADOR - Botão #btn-iniciar-importacao NÃO encontrado!');
-        }
+            }
     }
 
     function showImportSections() {
@@ -942,16 +850,12 @@
     }
 
     function showImportResults(data) {
-        console.log('📊 Resultados da importação:', data);
-        
         if (!data) {
-            console.log('📊 RESULTADOS - Dados não fornecidos');
             return;
         }
         
         // Verificar se SincronizadorModals está disponível
         if (typeof SincronizadorModals === 'undefined') {
-            console.log('📊 RESULTADOS - SincronizadorModals não disponível, usando alert');
             alert('Importação concluída! Produtos processados: ' + (data.total || data.produtos_importados || 0));
             return;
         }
@@ -969,9 +873,6 @@
         
         // Obter nome do lojista se disponível
         const lojistaName = $("#lojista_destino option:selected").text() || 'Lojista de Destino';
-        
-        console.log('📊 RESULTADOS - Dados formatados:', dadosRelatorio);
-        console.log('📊 RESULTADOS - Lojista:', lojistaName);
         
         // Adicionar logs se disponíveis
         if (data.logs && Array.isArray(data.logs) && data.logs.length > 0) {
@@ -1013,14 +914,11 @@
         // 🚀 NOVA FUNCIONALIDADE: Carregar automaticamente produtos sincronizados após importação
         const lojistaId = $("#lojista_destino").val();
         if (lojistaId && (dadosRelatorio.produtos_criados > 0 || dadosRelatorio.produtos_atualizados > 0)) {
-            console.log('🔄 Importação bem-sucedida, sugerindo carregamento automático dos produtos sincronizados...');
-            
             // Verificar se estamos na página de produtos sincronizados
             const isOnSyncPage = window.location.href.includes('sincronizados');
             
             if (isOnSyncPage) {
                 setTimeout(() => {
-                    console.log('🔄 Carregando automaticamente produtos sincronizados...');
                     carregarProdutosSincronizados(lojistaId);
                 }, 2000); // Aguardar 2 segundos para não sobrecarregar
             } else {
@@ -1033,8 +931,6 @@
     }
 
     function renderProdutosSincronizados(produtos) {
-        console.log('📋 Renderizando produtos sincronizados:', produtos.length);
-        
         const tbody = $('#produtos-sincronizados-tbody');
         const tabela = $('#tabela-sincronizados');
         const totalSpan = $('#total-produtos');
@@ -1095,20 +991,16 @@
         tabela.show();
         
         const endTime = performance.now();
-        console.log(`✅ Produtos renderizados em ${(endTime - startTime).toFixed(2)}ms`);
+
     }
 
     function filterProdutosSincronizados(termo) {
-        console.log('🔍 Filtrando produtos:', termo);
-        
         if (!WC.produtosSincronizados || WC.produtosSincronizados.length === 0) {
-            console.log('⚠️ Nenhum produto para filtrar');
             return;
         }
         
         // 🚀 OTIMIZAÇÃO: Se termo vazio, mostrar todos os produtos rapidamente
         if (!termo || termo.trim() === '') {
-            console.log('🔍 Termo vazio - mostrando todos os produtos');
             renderProdutosSincronizados(WC.produtosSincronizados);
             return;
         }
@@ -1124,7 +1016,7 @@
         });
         
         const endTime = performance.now();
-        console.log(`🔍 Filtro aplicado em ${(endTime - startTime).toFixed(2)}ms: ${produtosFiltrados.length}/${WC.produtosSincronizados.length} produtos`);
+
         renderProdutosSincronizados(produtosFiltrados);
     }
 
@@ -1135,8 +1027,6 @@
     
     // Função global para ver detalhes do produto
     window.verDetalhesProduto = function(produtoId) {
-        console.log('🔍 Ver detalhes do produto:', produtoId);
-        
         const produto = WC.produtosSincronizados.find(p => p.id_fabrica == produtoId);
         if (!produto) {
             if (typeof SincronizadorModals !== 'undefined') {
@@ -1324,3 +1214,5 @@
     });
 
 })(jQuery);
+
+

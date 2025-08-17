@@ -147,8 +147,8 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
                     $lojistas = get_option('sincronizador_wc_lojistas', array());
                     
                     // DEBUG: Mostrar informações dos lojistas
-                    error_log('IMPORTAR.PHP DEBUG - Total de lojistas encontrados: ' . count($lojistas));
-                    error_log('IMPORTAR.PHP DEBUG - Dados dos lojistas: ' . print_r($lojistas, true));
+
+
                     
                     if (empty($lojistas)) {
                         echo '<p style="color: red; font-weight: bold;">⚠️ NENHUM LOJISTA CADASTRADO!</p>';

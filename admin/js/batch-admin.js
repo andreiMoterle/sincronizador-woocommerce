@@ -118,8 +118,7 @@
                     }
                 }.bind(this),
                 error: function() {
-                    console.log('Erro ao verificar status do lote');
-                }
+                    }
             });
         },
         
@@ -376,8 +375,7 @@
                     });
                 }
             } catch (e) {
-                console.log('Erro ao restaurar estado do formulário:', e);
-            }
+                }
         },
         
         initExistingBatches: function() {
@@ -502,3 +500,4 @@
     window.SincronizadorBatch = SincronizadorBatch;
     
 })(jQuery);
+

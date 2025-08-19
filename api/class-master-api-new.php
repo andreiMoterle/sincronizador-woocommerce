@@ -13,9 +13,6 @@ class Sincronizador_WC_Master_API {
     private $token_option = 'sincronizador_wc_master_token';
     
     public function __construct() {
-        // Debug: Log quando a classe é inicializada
-        error_log("🚀 Master API: Constructor chamado");
-        
         add_action('rest_api_init', array($this, 'register_master_routes'));
         add_action('sincronizador_wc_vendas_sincronizadas', array($this, 'save_sync_data'), 10, 2);
         
@@ -23,23 +20,15 @@ class Sincronizador_WC_Master_API {
         if (!get_option($this->token_option)) {
             $this->generate_access_token();
         }
-        
-        // Debug: Log do token
-        error_log("🔑 Master API: Token atual - " . get_option($this->token_option));
     }
     
     public function register_master_routes() {
-        // Debug: Log quando as rotas são registradas
-        error_log("📡 Master API: Registrando rotas REST");
-        
         // Endpoint principal para o painel master - dados completos da fábrica
         register_rest_route('sincronizador-wc/v1', '/master/fabrica-status', array(
             'methods' => 'GET',
             'callback' => array($this, 'get_fabrica_status'),
             'permission_callback' => array($this, 'check_master_permissions')
         ));
-        
-        error_log("✅ Master API: Rota /master/fabrica-status registrada");
         
         // Endpoint para dados detalhados dos lojistas/revendedores
         register_rest_route('sincronizador-wc/v1', '/master/revendedores', array(
@@ -48,7 +37,7 @@ class Sincronizador_WC_Master_API {
             'permission_callback' => array($this, 'check_master_permissions')
         ));
         
-        error_log("✅ Master API: Rota /master/revendedores registrada");
+        // Endpoint para produtos mais vendidos
         register_rest_route('sincronizador-wc/v1', '/master/produtos-top', array(
             'methods' => 'GET',
             'callback' => array($this, 'get_produtos_top'),

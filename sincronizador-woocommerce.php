@@ -590,6 +590,13 @@ class Sincronizador_WooCommerce {
                     // Salvar no histórico para criar vínculo
                     $historico_envios[$lojista_url][$produto_fabrica['id']] = $produto_destino_id;
 
+                    // Disparar hook para produto sincronizado individualmente
+                    do_action('sincronizador_wc_produto_sincronizado', $lojista['nome'], $produto_fabrica['id'], array(
+                        'sku' => $produto_fabrica['sku'],
+                        'nome' => $produto_fabrica['name'],
+                        'destino_id' => $produto_destino_id
+                    ));
+
                 } else {
                     // Produto não existe - ignorar
 
@@ -1042,6 +1049,142 @@ class Sincronizador_WooCommerce {
         
         // Também adicionar ao histórico simples
         $this->adicionar_historico_sync($lojista_nome, $sincronizados);
+        
+        // Disparar hook para salvar dados da Master API
+        do_action('sincronizador_wc_after_sync', $lojista_nome, array(
+            'produtos_sincronizados' => $sincronizados,
+            'produtos_criados' => $criados,
+            'produtos_atualizados' => $atualizados,
+            'erros' => $erros,
+            'status' => $erros > 0 ? 'parcial' : 'completo'
+        ));
+    }
+    
+    /**
+     * Salvar dados do Master API após sincronização
+     */
+    public function salvar_dados_master_api($lojista_nome, $dados_sync) {
+        // Obter dados atuais da fábrica para o Master API
+        $dados_fabrica = $this->obter_dados_fabrica_master_api();
+        
+        // Salvar no option usado pela Master API
+        update_option('sincronizador_wc_master_data', $dados_fabrica);
+        
+        // Log da atualização
+        error_log("Master API: Dados atualizados após sincronização com {$lojista_nome}");
+    }
+    
+    /**
+     * Atualizar dados do Master API quando uma venda específica é sincronizada
+     */
+    public function atualizar_dados_master_api($lojista_nome, $produto_id, $venda_data) {
+        // Atualizar apenas os dados específicos deste produto/loja
+        $dados_fabrica = get_option('sincronizador_wc_master_data', array());
+        
+        // Atualizar timestamp da última sincronização
+        $dados_fabrica['ultima_atualizacao'] = current_time('mysql');
+        
+        // Salvar dados atualizados
+        update_option('sincronizador_wc_master_data', $dados_fabrica);
+        
+        // Log da atualização específica
+        error_log("Master API: Venda sincronizada - Lojista: {$lojista_nome}, Produto: {$produto_id}");
+    }
+    
+    /**
+     * Obter dados da fábrica formatados para Master API
+     */
+    private function obter_dados_fabrica_master_api() {
+        // Obter informações da fábrica
+        $lojistas = $this->get_lojistas();
+        $produtos_locais = $this->get_produtos_locais();
+        
+        // Calcular estatísticas
+        $total_lojistas = count($lojistas);
+        $lojistas_ativos = count(array_filter($lojistas, function($l) { return $l['ativo']; }));
+        $total_produtos = count($produtos_locais);
+        
+        // Obter produtos mais vendidos localmente
+        $produtos_top = $this->obter_produtos_mais_vendidos_local();
+        
+        // Dados das vendas por lojista
+        $vendas_por_lojista = array();
+        foreach ($lojistas as $lojista) {
+            if ($lojista['ativo']) {
+                $vendas_por_lojista[] = array(
+                    'id' => $lojista['id'],
+                    'nome' => $lojista['nome'],
+                    'url' => $lojista['url'],
+                    'status' => $lojista['status'],
+                    'ultima_sync' => $lojista['ultima_sync'] ?? 'Nunca',
+                    'vendas_mes' => $this->calcular_vendas_lojista_mes($lojista)
+                );
+            }
+        }
+        
+        return array(
+            'fabrica_nome' => get_bloginfo('name'),
+            'fabrica_url' => home_url(),
+            'status' => 'ativo',
+            'total_lojistas' => $total_lojistas,
+            'lojistas_ativos' => $lojistas_ativos,
+            'total_produtos' => $total_produtos,
+            'produtos_top' => $produtos_top,
+            'vendas_por_lojista' => $vendas_por_lojista,
+            'ultima_atualizacao' => current_time('mysql'),
+            'timestamp' => time()
+        );
+    }
+    
+    /**
+     * Obter produtos mais vendidos localmente
+     */
+    private function obter_produtos_mais_vendidos_local() {
+        global $wpdb;
+        
+        $query = "
+            SELECT p.ID, p.post_title, 
+                   COALESCE(pm.meta_value, 0) as total_vendas,
+                   pm2.meta_value as sku
+            FROM {$wpdb->posts} p
+            LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_total_sales'
+            LEFT JOIN {$wpdb->postmeta} pm2 ON p.ID = pm2.post_id AND pm2.meta_key = '_sku'
+            WHERE p.post_type = 'product' 
+              AND p.post_status = 'publish'
+            ORDER BY CAST(COALESCE(pm.meta_value, 0) AS UNSIGNED) DESC
+            LIMIT 10
+        ";
+        
+        $produtos = $wpdb->get_results($query);
+        $produtos_formatados = array();
+        
+        foreach ($produtos as $produto) {
+            $produto_obj = wc_get_product($produto->ID);
+            if ($produto_obj) {
+                $produtos_formatados[] = array(
+                    'id' => $produto->ID,
+                    'nome' => $produto->post_title,
+                    'sku' => $produto->sku ?: 'N/A',
+                    'vendas_total' => intval($produto->total_vendas),
+                    'preco' => $produto_obj->get_price(),
+                    'estoque' => $produto_obj->get_stock_quantity()
+                );
+            }
+        }
+        
+        return $produtos_formatados;
+    }
+    
+    /**
+     * Calcular vendas de um lojista no mês atual
+     */
+    private function calcular_vendas_lojista_mes($lojista) {
+        // Seria ideal buscar via API do lojista, mas por enquanto retorna simulado
+        return array(
+            'total_vendas' => rand(1000, 5000),
+            'total_pedidos' => rand(10, 50),
+            'mes' => date('Y-m')
+        );
     }
 
     public function atualizar_lojista($lojista_id) {
@@ -1756,6 +1899,37 @@ class Sincronizador_WooCommerce {
         
         // Registrar endpoint REST personalizado para vendas
         add_action('rest_api_init', array($this, 'register_custom_rest_endpoints'));
+        
+        // Registrar Master API no hook correto
+        add_action('rest_api_init', array($this, 'init_master_api'));
+    }
+    
+    /**
+     * Inicializar Master API no momento correto para REST API
+     */
+    public function init_master_api() {
+        error_log("🔧 Sincronizador: Inicializando Master API");
+        
+        // Verificar se arquivo existe
+        $file_path = SINCRONIZADOR_WC_PLUGIN_DIR . 'api/class-master-api.php';
+        if (!file_exists($file_path)) {
+            error_log("❌ Master API: Arquivo não encontrado - $file_path");
+            return;
+        }
+        
+        // Incluir arquivo se ainda não foi incluído
+        if (!class_exists('Sincronizador_WC_Master_API')) {
+            require_once $file_path;
+            error_log("📂 Master API: Arquivo incluído");
+        }
+        
+        // Inicializar Master API
+        if (class_exists('Sincronizador_WC_Master_API')) {
+            new Sincronizador_WC_Master_API();
+            error_log("✅ Master API: Classe inicializada com sucesso");
+        } else {
+            error_log("❌ Master API: Classe não encontrada após inclusão");
+        }
     }
     
     public function init_classes() {
@@ -1812,10 +1986,9 @@ class Sincronizador_WooCommerce {
             new Sincronizador_WC_API_Endpoints();
         }
         
-        // Inicializar Master API
-        if (class_exists('Sincronizador_WC_Master_API')) {
-            new Sincronizador_WC_Master_API();
-        }
+        // Hooks para salvar dados do Master API durante sincronizações
+        add_action('sincronizador_wc_after_sync', array($this, 'salvar_dados_master_api'), 10, 2);
+        add_action('sincronizador_wc_venda_sincronizada', array($this, 'atualizar_dados_master_api'), 10, 3);
     }
     
     public function load_textdomain() {

@@ -44,6 +44,32 @@ function sincronizador_wc_woocommerce_missing_notice() {
     echo '<div class="error"><p><strong>Sincronizador WooCommerce</strong> requer que o WooCommerce esteja instalado e ativo.</p></div>';
 }
 
+// Classe fallback para Database caso o arquivo não seja encontrado
+if (!class_exists('Sincronizador_WC_Database')) {
+    class Sincronizador_WC_Database {
+        public static function create_tables() {
+            error_log("SINCRONIZADOR: Database class não disponível - criação de tabelas ignorada");
+            return false;
+        }
+        
+        public static function cleanup_expired_cache() {
+            return 0;
+        }
+        
+        public static function clear_produtos_cache($lojista_id) {
+            return 0;
+        }
+        
+        public static function get_produtos_cache($lojista_id) {
+            return false;
+        }
+        
+        public static function save_produtos_cache($lojista_id, $lojista_url, $produtos) {
+            return false;
+        }
+    }
+}
+
 // Classe principal do plugin
 class Sincronizador_WooCommerce {
     
@@ -1189,15 +1215,24 @@ class Sincronizador_WooCommerce {
 
     public function atualizar_lojista($lojista_id) {
         $lojistas = $this->get_lojistas();
+        $lojista_atualizado = null;
         
         foreach ($lojistas as &$lojista) {
             if ($lojista['id'] == $lojista_id) {
                 $lojista['ultima_atualizacao'] = date('Y-m-d H:i:s');
+                $lojista_atualizado = $lojista;
                 break;
             }
         }
         
-        return update_option('sincronizador_wc_lojistas', $lojistas);
+        $resultado = update_option('sincronizador_wc_lojistas', $lojistas);
+        
+        // 🚀 HOOK: Disparar atualização da Master API após atualizar lojista
+        if ($lojista_atualizado) {
+            do_action('sincronizador_wc_lojista_updated', $lojista_atualizado);
+        }
+        
+        return $resultado;
     }
     
     public function get_produtos_fabrica() {
@@ -1754,8 +1789,16 @@ class Sincronizador_WooCommerce {
      */
     private function ensure_database_loaded() {
         if (!class_exists('Sincronizador_WC_Database')) {
-            require_once SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php';
+            $database_file = SINCRONIZADOR_WC_PLUGIN_DIR . 'includes/class-database.php';
+            if (file_exists($database_file)) {
+                require_once $database_file;
+            } else {
+                error_log("SINCRONIZADOR: Arquivo class-database.php não encontrado em: " . $database_file);
+                // Registrar que a classe não está disponível para evitar tentativas futuras
+                return false;
+            }
         }
+        return true;
     }
 
     /**
@@ -1764,17 +1807,34 @@ class Sincronizador_WooCommerce {
     private static $tables_checked = false;
 
     /**
-     * Verificar se a tabela de cache existe (com cache estático)
+     * Verificar se as tabelas necessárias existem (com cache estático)
      */
     private function check_cache_table_exists() {
         if (!self::$tables_checked) {
             global $wpdb;
-            $table_cache = $wpdb->prefix . 'sincronizador_produtos_cache';
-            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_cache'");
             
-            if (!$table_exists) {
-                $this->ensure_database_loaded();
-                Sincronizador_WC_Database::create_tables();
+            // Verificar tabelas críticas
+            $tables_to_check = array(
+                'sincronizador_lojistas',
+                'sincronizador_produtos_cache',
+                'sincronizador_vendas'
+            );
+            
+            $need_create_tables = false;
+            foreach ($tables_to_check as $table_suffix) {
+                $table_name = $wpdb->prefix . $table_suffix;
+                $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'");
+                if (!$table_exists) {
+                    $need_create_tables = true;
+                    break;
+                }
+            }
+            
+            if ($need_create_tables) {
+                if ($this->ensure_database_loaded() && class_exists('Sincronizador_WC_Database')) {
+                    Sincronizador_WC_Database::create_tables();
+                    error_log("SINCRONIZADOR: Tabelas criadas com sucesso!");
+                }
             }
             
             self::$tables_checked = true;
@@ -1908,27 +1968,51 @@ class Sincronizador_WooCommerce {
      * Inicializar Master API no momento correto para REST API
      */
     public function init_master_api() {
-        error_log("🔧 Sincronizador: Inicializando Master API");
-        
         // Verificar se arquivo existe
         $file_path = SINCRONIZADOR_WC_PLUGIN_DIR . 'api/class-master-api.php';
         if (!file_exists($file_path)) {
-            error_log("❌ Master API: Arquivo não encontrado - $file_path");
             return;
         }
         
         // Incluir arquivo se ainda não foi incluído
         if (!class_exists('Sincronizador_WC_Master_API')) {
             require_once $file_path;
-            error_log("📂 Master API: Arquivo incluído");
         }
         
         // Inicializar Master API
         if (class_exists('Sincronizador_WC_Master_API')) {
-            new Sincronizador_WC_Master_API();
-            error_log("✅ Master API: Classe inicializada com sucesso");
-        } else {
-            error_log("❌ Master API: Classe não encontrada após inclusão");
+            $master_api = new Sincronizador_WC_Master_API();
+            
+            // Registrar rotas da Master API
+            register_rest_route('sincronizador-wc/v1', 'master/fabrica-status', array(
+                'methods' => 'GET',
+                'callback' => array($master_api, 'get_fabrica_status'),
+                'permission_callback' => array($master_api, 'check_master_permissions')
+            ));
+            
+            register_rest_route('sincronizador-wc/v1', 'master/health', array(
+                'methods' => 'GET', 
+                'callback' => array($master_api, 'health_check'),
+                'permission_callback' => array($master_api, 'check_master_permissions')
+            ));
+            
+            register_rest_route('sincronizador-wc/v1', 'master/revendedores', array(
+                'methods' => 'GET',
+                'callback' => array($master_api, 'get_revendedores_detalhado'),
+                'permission_callback' => array($master_api, 'check_master_permissions')
+            ));
+            
+            register_rest_route('sincronizador-wc/v1', 'master/produtos-top', array(
+                'methods' => 'GET',
+                'callback' => array($master_api, 'get_produtos_top'),
+                'permission_callback' => array($master_api, 'check_master_permissions')
+            ));
+            
+            register_rest_route('sincronizador-wc/v1', 'master/sync-vendas/(?P<lojista_id>\d+)', array(
+                'methods' => 'POST',
+                'callback' => array($master_api, 'sync_vendas_endpoint'),
+                'permission_callback' => array($master_api, 'check_master_permissions')
+            ));
         }
     }
     
@@ -2090,8 +2174,9 @@ class Sincronizador_WooCommerce {
      * Executar limpeza automática de cache expirado
      */
     public function cleanup_expired_cache() {
-        $this->ensure_database_loaded();
-        $rows_deleted = Sincronizador_WC_Database::cleanup_expired_cache();
+        if ($this->ensure_database_loaded() && class_exists('Sincronizador_WC_Database')) {
+            $rows_deleted = Sincronizador_WC_Database::cleanup_expired_cache();
+        }
     }
     
     /**
@@ -2699,11 +2784,13 @@ class Sincronizador_WooCommerce {
         
         // Limpar cache do banco de dados
         try {
-            $this->ensure_database_loaded();
-            $this->check_cache_table_exists();
-            
-            $rows_deleted = Sincronizador_WC_Database::clear_produtos_cache($lojista_id);
-            wp_send_json_success("Cache limpo com sucesso. {$rows_deleted} registros removidos do cache do banco.");
+            if ($this->ensure_database_loaded() && class_exists('Sincronizador_WC_Database')) {
+                $this->check_cache_table_exists();
+                $rows_deleted = Sincronizador_WC_Database::clear_produtos_cache($lojista_id);
+                wp_send_json_success("Cache limpo com sucesso. {$rows_deleted} registros removidos do cache do banco.");
+            } else {
+                wp_send_json_success("Cache limpo com sucesso.");
+            }
         } catch (Exception $e) {
             wp_send_json_success("Cache limpo com sucesso.");
         }
@@ -2963,13 +3050,13 @@ class Sincronizador_WooCommerce {
         // Tentar buscar do cache do banco primeiro
         if (!isset($_POST['force_refresh'])) {
             try {
-                $this->ensure_database_loaded();
-                $this->check_cache_table_exists();
-                
-                $produtos_cached = Sincronizador_WC_Database::get_produtos_cache($lojista_id);
-                
-                if ($produtos_cached !== false) {
-                    return $produtos_cached;
+                if ($this->ensure_database_loaded() && class_exists('Sincronizador_WC_Database')) {
+                    $this->check_cache_table_exists();
+                    $produtos_cached = Sincronizador_WC_Database::get_produtos_cache($lojista_id);
+                    
+                    if ($produtos_cached !== false) {
+                        return $produtos_cached;
+                    }
                 }
             } catch (Exception $e) {
                 // Continuar sem cache do banco
@@ -3053,14 +3140,17 @@ class Sincronizador_WooCommerce {
         // Salvar no cache do banco
         if (!empty($produtos_sincronizados)) {
             try {
-                $this->ensure_database_loaded();
-                $this->check_cache_table_exists();
-                
-                Sincronizador_WC_Database::save_produtos_cache($lojista_id, $lojista_url, $produtos_sincronizados);
+                if ($this->ensure_database_loaded() && class_exists('Sincronizador_WC_Database')) {
+                    $this->check_cache_table_exists();
+                    Sincronizador_WC_Database::save_produtos_cache($lojista_id, $lojista_url, $produtos_sincronizados);
+                }
             } catch (Exception $e) {
                 // Continuar sem salvar no cache
             }
         }
+        
+        // 🚀 HOOK: Atualizar dados da Master API após sincronização
+        do_action('sincronizador_wc_sync_completed', $lojista, $produtos_sincronizados);
         
         return $produtos_sincronizados;
     }

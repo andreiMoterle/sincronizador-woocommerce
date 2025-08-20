@@ -1,0 +1,298 @@
+{
+  "fabrica": {
+    "id": 1,
+    "nome": "JMN SEMI JOIAS - ATACADO DE SEMIJOIAS",
+    "url": "https://fabrica.prometas.store",
+    "status": "ativo",
+    "ultima_atualizacao": "2025-08-19 20:14:32",
+    "email_contato": "contato@jmnsemijoias.com.br"
+  },
+  "estatisticas_globais": {
+    "total_vendas_mes_atual": 127,
+    "faturamento_total_mes_atual": 45230.50,
+    "produtos_total_sincronizados": 245,
+    "ticket_medio_global": 356.14,
+    "crescimento_mensal": 18.5,
+    "revendedores_novos_mes": 2
+  },
+  "produto_campeao_geral": {
+    "id": 45,
+    "nome": "Conjunto Delicado Dourado",
+    "vendas_totais": 89,
+    "faturamento_total": 12450.00,
+    "vendas_mes_atual": 23,
+    "revendedores_vendendo": 4
+  },
+  "revendedores": [
+    {
+      "id": 1,
+      "nome": "LOJA BELLA ACESSÓRIOS",
+      "url": "https://bellaacessorios.com.br",
+      "ativo": true,
+      "status": "ativo",
+      "ultima_sync": "2025-08-19 19:30:00",
+      "criado_em": "2025-08-10 14:20:13",
+      "percentual_acrescimo": 25.0,
+      "url_fabrica_vinculada": "https://fabrica.prometas.store",
+      "fabrica_id": 1,
+      "estatisticas_mes_atual": {
+        "vendas_quantidade": 45,
+        "faturamento_total": 18750.00,
+        "produtos_sincronizados": 89,
+        "ticket_medio": 416.67
+      },
+      "estatisticas_gerais": {
+        "total_vendas_historico": 287,
+        "status_vendas": {
+          "vendas_pendentes": 2,
+          "vendas_processando": 5,
+          "vendas_concluidas": 38,
+          "vendas_canceladas": 0,
+          "vendas_reembolsadas": 0
+        },
+        "taxa_conversao": "18%",
+        "cliente_fidelidade": "42%"
+      },
+      "top_5_produtos": [
+        {
+          "id": 45,
+          "nome": "Conjunto Delicado Dourado",
+          "vendas": 12,
+          "faturamento": 1680.00,
+          "posicao": 1
+        },
+        {
+          "id": 23,
+          "nome": "Brinco Argola Premium",
+          "vendas": 8,
+          "faturamento": 1200.00,
+          "posicao": 2
+        },
+        {
+          "id": 67,
+          "nome": "Pulseira Charm Coração",
+          "vendas": 7,
+          "faturamento": 980.00,
+          "posicao": 3
+        },
+        {
+          "id": 89,
+          "nome": "Anel Solitário Elegante",
+          "vendas": 6,
+          "faturamento": 1440.00,
+          "posicao": 4
+        },
+        {
+          "id": 12,
+          "nome": "Colar Gargantilha Moderna",
+          "vendas": 5,
+          "faturamento": 750.00,
+          "posicao": 5
+        }
+      ],
+      "ultimas_vendas": [
+        {
+          "id": 5647,
+          "data": "2025-08-19 18:45:23",
+          "valor": 450.00,
+          "produto": "Brinco Argola Premium",
+          "status": "concluida"
+        },
+        {
+          "id": 5643,
+          "data": "2025-08-19 15:20:10",
+          "valor": 280.00,
+          "produto": "Pulseira Charm Coração",
+          "status": "processando"
+        },
+        {
+          "id": 5639,
+          "data": "2025-08-19 11:30:45",
+          "valor": 630.00,
+          "produto": "Conjunto Delicado Dourado",
+          "status": "concluida"
+        }
+      ],
+      "configuracoes": {
+        "sincronizacao_automatica": true,
+        "aplica_percentual_global": true,
+        "notificacoes_ativas": true
+      }
+    },
+    {
+      "id": 2,
+      "nome": "GLAMOUR STORE",
+      "url": "https://glamourstore.shop",
+      "ativo": true,
+      "status": "ativo",
+      "ultima_sync": "2025-08-19 20:05:00",
+      "criado_em": "2025-08-15 09:45:20",
+      "percentual_acrescimo": 35.0,
+      "url_fabrica_vinculada": "https://fabrica.prometas.store",
+      "fabrica_id": 1,
+      "estatisticas_mes_atual": {
+        "vendas_quantidade": 32,
+        "faturamento_total": 14280.50,
+        "produtos_sincronizados": 67,
+        "ticket_medio": 446.27
+      },
+      "estatisticas_gerais": {
+        "total_vendas_historico": 156,
+        "status_vendas": {
+          "vendas_pendentes": 1,
+          "vendas_processando": 3,
+          "vendas_concluidas": 28,
+          "vendas_canceladas": 0,
+          "vendas_reembolsadas": 0
+        },
+        "taxa_conversao": "22%",
+        "cliente_fidelidade": "38%"
+      },
+      "top_5_produtos": [
+        {
+          "id": 23,
+          "nome": "Anel Solitário Elegante",
+          "vendas": 8,
+          "faturamento": 2240.00,
+          "posicao": 1
+        },
+        {
+          "id": 67,
+          "nome": "Brinco Gota Cristal",
+          "vendas": 6,
+          "faturamento": 1440.00,
+          "posicao": 2
+        },
+        {
+          "id": 34,
+          "nome": "Colar Gargantilha Moderna",
+          "vendas": 5,
+          "faturamento": 1300.00,
+          "posicao": 3
+        },
+        {
+          "id": 78,
+          "nome": "Pulseira Tennis Deluxe",
+          "vendas": 4,
+          "faturamento": 960.00,
+          "posicao": 4
+        },
+        {
+          "id": 45,
+          "nome": "Conjunto Delicado Dourado",
+          "vendas": 4,
+          "faturamento": 1120.00,
+          "posicao": 5
+        }
+      ],
+      "ultimas_vendas": [
+        {
+          "id": 3421,
+          "data": "2025-08-19 19:15:30",
+          "valor": 520.00,
+          "produto": "Colar Gargantilha Moderna",
+          "status": "concluida"
+        },
+        {
+          "id": 3418,
+          "data": "2025-08-19 16:45:22",
+          "valor": 380.00,
+          "produto": "Brinco Gota Cristal",
+          "status": "processando"
+        }
+      ],
+      "configuracoes": {
+        "sincronizacao_automatica": true,
+        "aplica_percentual_global": true,
+        "notificacoes_ativas": true
+      }
+    },
+    {
+      "id": 3,
+      "nome": "ACESSÓRIOS PREMIUM LTDA",
+      "url": "https://acessoriospremium.net",
+      "ativo": false,
+      "status": "inativo",
+      "ultima_sync": "2025-08-17 14:20:00",
+      "criado_em": "2025-08-05 16:30:45",
+      "percentual_acrescimo": 20.0,
+      "url_fabrica_vinculada": "https://fabrica.prometas.store",
+      "fabrica_id": 1,
+      "estatisticas_mes_atual": {
+        "vendas_quantidade": 18,
+        "faturamento_total": 7800.00,
+        "produtos_sincronizados": 45,
+        "ticket_medio": 433.33
+      },
+      "estatisticas_gerais": {
+        "total_vendas_historico": 89,
+        "status_vendas": {
+          "vendas_pendentes": 0,
+          "vendas_processando": 1,
+          "vendas_concluidas": 17,
+          "vendas_canceladas": 0,
+          "vendas_reembolsadas": 0
+        },
+        "taxa_conversao": "12%",
+        "cliente_fidelidade": "28%"
+      },
+      "top_5_produtos": [
+        {
+          "id": 67,
+          "nome": "Relógio Feminino Dourado",
+          "vendas": 5,
+          "faturamento": 1750.00,
+          "posicao": 1
+        },
+        {
+          "id": 23,
+          "nome": "Pulseira Tennis Premium",
+          "vendas": 4,
+          "faturamento": 1400.00,
+          "posicao": 2
+        },
+        {
+          "id": 45,
+          "nome": "Brinco Cristal Swarovski",
+          "vendas": 3,
+          "faturamento": 900.00,
+          "posicao": 3
+        },
+        {
+          "id": 12,
+          "nome": "Anel Ouro Branco",
+          "vendas": 3,
+          "faturamento": 1200.00,
+          "posicao": 4
+        },
+        {
+          "id": 89,
+          "nome": "Conjunto Premium Gold",
+          "vendas": 2,
+          "faturamento": 800.00,
+          "posicao": 5
+        }
+      ],
+      "ultimas_vendas": [
+        {
+          "id": 2843,
+          "data": "2025-08-17 13:30:15",
+          "valor": 350.00,
+          "produto": "Pulseira Tennis",
+          "status": "concluida"
+        }
+      ],
+      "configuracoes": {
+        "sincronizacao_automatica": false,
+        "aplica_percentual_global": true,
+        "notificacoes_ativas": false
+      }
+    }
+  ],
+  "metadados": {
+    "total_revendedores": 3,
+    "revendedores_ativos": 2,
+    "data_geracao": "2025-08-19 20:14:32",
+    "versao_api": "2.0"
+  }
+}

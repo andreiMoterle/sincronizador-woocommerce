@@ -5,6 +5,7 @@
  * Description: Plugin para sincronização de produtos entre fábrica e lojistas via API REST WooCommerce com cache avançado e processamento em lote
  * Version: 1.1.0
  * Author: Moterle Andrei
+ * Author URI:  https://github.com/andreiMoterle
  * Text Domain: sincronizador-wc
  * Domain Path: /languages
  * Requires at least: 5.0

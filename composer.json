@@ -13,13 +13,13 @@
         "lojistas",
         "fabrica"
     ],
-    "homepage": "https://github.com/seu-usuario/sincronizador-woocommerce",
+    "homepage": "https://github.com/andreiMoterle/sincronizador-woocommerce",
     "license": "GPL-3.0-or-later",
     "authors": [
         {
-            "name": "Seu Nome",
-            "email": "seu.email@exemplo.com",
-            "homepage": "https://exemplo.com",
+            "name": "Andrei Moterle",
+            "email": "andreimoterle@gmail.com",
+            "homepage": "https://github.com/andreiMoterle",
             "role": "Developer"
         }
     ],
@@ -65,18 +65,14 @@
         ]
     },
     "support": {
-        "issues": "https://github.com/seu-usuario/sincronizador-woocommerce/issues",
-        "wiki": "https://github.com/seu-usuario/sincronizador-woocommerce/wiki",
-        "source": "https://github.com/seu-usuario/sincronizador-woocommerce"
+        "issues": "https://github.com/andreiMoterle/sincronizador-woocommerce/issues",
+        "wiki": "https://github.com/andreiMoterle/sincronizador-woocommerce/wiki",
+        "source": "https://github.com/andreiMoterle/sincronizador-woocommerce"
     },
     "funding": [
         {
-            "type": "github",
-            "url": "https://github.com/sponsors/seu-usuario"
-        },
-        {
-            "type": "patreon",
-            "url": "https://patreon.com/seu-usuario"
+            "type": "Developer",
+            "url": "https://github.com/andreiMoterle"
         }
     ]
 }

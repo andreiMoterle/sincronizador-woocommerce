@@ -312,9 +312,8 @@
             },
             success: function(response) {
                 if (response.success) {
-                    SincronizadorModals.mostrarSucesso(`✅ Vendas sincronizadas com sucesso! 
-                        Vendas encontradas: ${response.data.vendas_sincronizadas || 0}`);
-                    
+                    SincronizadorModals.mostrarSucesso(`✅ Vendas sincronizadas com sucesso!`);
+
                     // Recarregar produtos sincronizados para mostrar vendas atualizadas
                     setTimeout(() => {
                         carregarProdutosSincronizados(lojistaId, true); // Force refresh após sync vendas
@@ -690,7 +689,7 @@
         if (!forceRefresh && WC.produtosSincronizados && WC.produtosSincronizados.length > 0 && WC.ultimoLojistaCarregado === lojistaId) {
             renderProdutosSincronizados(WC.produtosSincronizados);
             SincronizadorModals.setButtonLoading(btn, false, '📊 Carregar Sincronizados');
-            SincronizadorModals.showToast('📦 Dados carregados do cache (mais rápido)', 'info');
+            SincronizadorModals.showToast('📦 Dados carregados do cache', 'info');
             return;
         }
         
@@ -720,7 +719,7 @@
                 if (forceRefresh) {
                     cacheMsg = '✅ Produtos atualizados do servidor!';
                 } else if (isFromDbCache) {
-                    cacheMsg = '⚡ Produtos carregados do cache do banco (ultra-rápido)';
+                    cacheMsg = '⚡ Produtos carregados! do cache do banco!';
                 } else {
                     cacheMsg = '✅ Produtos carregados!';
                 }
@@ -970,7 +969,7 @@
                 </td>
                 <td class="column-vendas">
                     ${produto.vendas && produto.vendas > 0 ? 
-                        `<strong>R$ ${produto.vendas}</strong>` : 
+                        `<strong>${parseInt(produto.vendas, 10)}</strong>` : 
                         '<small>Sem vendas</small>'
                     }
                 </td>
@@ -1113,7 +1112,7 @@
             vendasHtml = `
                 <div class="vendas-section" style="background: #e8f5e8; padding: 15px; border-radius: 6px; border-left: 4px solid #46b450;">
                     <h4 style="margin: 0 0 8px 0; color: #23282d;">💰 Vendas</h4>
-                    <p style="margin: 0; font-size: 16px;"><strong>Total:</strong> ${formatarPreco(produto.vendas)}</p>
+                    <p style="margin: 0; font-size: 16px;"><strong>Total:</strong> ${parseInt(produto.vendas, 10)}</p>
                 </div>
             `;
         } else {

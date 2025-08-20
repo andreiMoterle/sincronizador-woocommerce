@@ -22,7 +22,7 @@
     background: #fff;
     border: 1px solid #ccd0d4;
     border-radius: 6px;
-    padding: 20px;
+    padding: 20px;    
     margin-bottom: 20px;
     box-shadow: 0 2px 4px rgba(0,0,0,.04);
     transition: all 0.3s ease;
@@ -42,7 +42,7 @@
 
 .card.full-width {
     width: 100%;
-    max-width: 100%;
+    max-width: 100% !important;
 }
 
 /* === Mensagens Informativas === */
@@ -88,7 +88,8 @@
 
 .filtro-item {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
 }
 

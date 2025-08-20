@@ -284,17 +284,6 @@ function sincronizador_get_vendas_simples($request) {
 // 5. COMANDO MANUAL PARA SINCRONIZAR TUDO
 // ========================================
 
-// Adicionar link no admin para sincronizar manualmente
-add_action('admin_bar_menu', function($wp_admin_bar) {
-    if (current_user_can('manage_options')) {
-        $wp_admin_bar->add_node(array(
-            'id' => 'sincronizar_vendas_manual',
-            'title' => 'Sincronizar Vendas',
-            'href' => admin_url('admin.php?action=sincronizar_vendas_manual'),
-        ));
-    }
-}, 100);
-
 add_action('admin_action_sincronizar_vendas_manual', function() {
     if (!current_user_can('manage_options')) {
         wp_die('Sem permissão');

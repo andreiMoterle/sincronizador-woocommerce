@@ -437,9 +437,9 @@ class Sincronizador_WooCommerce {
         echo '<th scope="row">Informações</th>';
         echo '<td>';
         if ($editing) {
-            echo '<p class="description">💡 Use o botão "� Testar" na lista de lojistas para verificar a conexão</p>';
+            echo '<p class="description">💡 Use o botão "Testar" na lista de lojistas para verificar a conexão</p>';
         } else {
-            echo '<p class="description">� A conexão será testada automaticamente - SÓ SALVA SE CONECTAR!</p>';
+            echo '<p class="description">A conexão será testada automaticamente - SÓ SALVA SE CONECTAR!</p>';
         }
         echo '</td>';
         echo '</tr>';
@@ -454,7 +454,7 @@ class Sincronizador_WooCommerce {
         echo '</table>';
         
         echo '<div class="notice notice-info inline" style="margin: 15px 0; padding: 10px; background: #e7f3ff; border-left: 4px solid #0073aa;">';
-        echo '<p><strong>� IMPORTANTE: Validação Obrigatória</strong></p>';
+        echo '<p><strong>IMPORTANTE: Validação Obrigatória</strong></p>';
         echo '<ul style="margin: 5px 0 0 20px;">';
         echo '<li>🔗 A conexão será testada automaticamente ao salvar</li>';
         echo '<li>✅ O lojista SÓ será salvo se a conexão funcionar</li>';
@@ -2943,10 +2943,25 @@ class Sincronizador_WooCommerce {
             wp_send_json_error('Produto não encontrado no destino ou erro de conexão');
         }
         
-        // Buscar vendas (agora com detalhes por variação)
+        // Buscar vendas (agora com detalhes por variação) e normalizar para inteiro
         $dados_vendas = $this->get_vendas_produto_destino_cached($lojista_data, $produto_id_destino);
-        $vendas_total = is_array($dados_vendas) ? ($dados_vendas['total_vendas'] ?? $dados_vendas) : $dados_vendas;
-        $vendas_por_variacao = is_array($dados_vendas) ? ($dados_vendas['vendas_por_variacao'] ?? array()) : array();
+        $vendas_total = 0;
+        $vendas_por_variacao = array();
+        if (is_array($dados_vendas)) {
+            if (isset($dados_vendas['total_vendas'])) {
+                $vendas_total = intval($dados_vendas['total_vendas']);
+            } elseif (isset($dados_vendas['vendas_total'])) {
+                $vendas_total = intval($dados_vendas['vendas_total']);
+            } else {
+                $vendas_total = 0;
+            }
+
+            if (isset($dados_vendas['vendas_por_variacao']) && is_array($dados_vendas['vendas_por_variacao'])) {
+                $vendas_por_variacao = $dados_vendas['vendas_por_variacao'];
+            }
+        } else {
+            $vendas_total = intval($dados_vendas ?? 0);
+        }
         
         // Buscar variações completas se for produto variável
         $variacoes_completas = array();
@@ -3093,13 +3108,19 @@ class Sincronizador_WooCommerce {
                 continue;
             }
             
-            // Obter vendas (com cache individual)
+            // Obter vendas (com cache individual) e normalizar para inteiro
             $vendas_data = $this->get_vendas_produto_destino_cached($lojista_data, $produto_id_destino);
-            
-            // Extrair o número de vendas para a tabela principal
-            $vendas_total = $vendas_data;
+            $vendas_total = 0;
             if (is_array($vendas_data)) {
-                $vendas_total = isset($vendas_data['total_vendas']) ? $vendas_data['total_vendas'] : 0;
+                if (isset($vendas_data['total_vendas'])) {
+                    $vendas_total = intval($vendas_data['total_vendas']);
+                } elseif (isset($vendas_data['vendas_total'])) {
+                    $vendas_total = intval($vendas_data['vendas_total']);
+                } else {
+                    $vendas_total = 0;
+                }
+            } else {
+                $vendas_total = intval($vendas_data ?? 0);
             }
             
             // Verificar se produto tem variações
@@ -4601,7 +4622,6 @@ class Sincronizador_WooCommerce {
         return $response;
     }
     
-    /**
     /**
      * AJAX: Exportar vendas
      */

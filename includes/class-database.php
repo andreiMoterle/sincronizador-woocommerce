@@ -7,7 +7,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class Sincronizador_WC_Database {
+if (!class_exists('Sincronizador_WC_Database')) {
+    class Sincronizador_WC_Database {
     
     public static function create_tables() {
         global $wpdb;
@@ -302,5 +303,6 @@ class Sincronizador_WC_Database {
             "DELETE FROM $table WHERE cache_expires < %s",
             $now
         ));
+    }
     }
 }

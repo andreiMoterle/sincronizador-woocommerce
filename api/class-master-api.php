@@ -114,18 +114,40 @@ class Sincronizador_WC_Master_API {
         
         // Estatísticas gerais
         $total_lojistas = count($lojistas);
-        $lojistas_ativos = count(array_filter($lojistas, function($l) { 
+        $lojistas_ativos = array_filter($lojistas, function($l) { 
             return isset($l['ativo']) && $l['ativo']; 
-        }));
+        });
         
         // Produtos sincronizados
         $total_produtos = $this->get_total_produtos_sincronizados();
         
-        // Vendas do período
-        $vendas_periodo = $this->get_vendas_periodo();
+        // Obter estatísticas de vendas (últimos 30 dias)
+        $estatisticas_vendas = $this->get_estatisticas_vendas_fabrica();
         
-        // Produto campeão
-        $produto_campeao = $this->get_produto_campeao();
+        // Obter top 5 produtos mais vendidos
+        $top_produtos = $this->get_top_produtos_vendidos(5);
+        
+        // Formatar dados dos revendedores com informações detalhadas
+        $revendedores_formatados = array();
+        foreach ($lojistas_ativos as $lojista) {
+            $estatisticas_lojista = $this->get_estatisticas_lojista($lojista);
+            $top_produtos_lojista = $this->get_top_produtos_lojista($lojista, 5);
+            $ultimas_vendas_lojista = $this->get_ultimas_vendas_lojista($lojista, 5);
+            
+            $revendedores_formatados[] = array(
+                'id' => $lojista['id'],
+                'nome' => $lojista['nome'],
+                'url' => $lojista['url'],
+                'percentual_acrescimo' => $lojista['percentual_acrescimo'] ?? 0,
+                'ativo' => $lojista['ativo'] ?? true,
+                'status' => isset($lojista['ativo']) && $lojista['ativo'] ? 'ativo' : 'inativo',
+                'ultima_sync' => $lojista['ultima_sync'] ?? null,
+                'criado_em' => $lojista['criado_em'] ?? null,
+                'estatisticas_gerais' => $estatisticas_lojista,
+                'top_5_produtos' => $top_produtos_lojista,
+                'ultimas_vendas' => $ultimas_vendas_lojista
+            );
+        }
         
         $response_data = array(
             'fabrica' => array(
@@ -133,17 +155,19 @@ class Sincronizador_WC_Master_API {
                 'url' => $site_url,
                 'status' => 'ativo',
                 'ultima_atualizacao' => current_time('mysql'),
-                'versao_plugin' => SINCRONIZADOR_WC_VERSION
+                'versao_plugin' => SINCRONIZADOR_WC_VERSION,
+                'codigo_atualizado' => '2025-08-20-v2' // Flag para confirmar atualização
             ),
             'estatisticas' => array(
                 'total_revendedores' => $total_lojistas,
-                'revendedores_ativos' => $lojistas_ativos,
+                'revendedores_ativos' => count($lojistas_ativos),
                 'total_produtos_sincronizados' => $total_produtos,
-                'vendas_mes_atual' => $vendas_periodo['vendas'],
-                'faturamento_mes_atual' => $vendas_periodo['faturamento']
+                'total_vendas_mes' => $estatisticas_vendas['total_vendas'],
+                'total_pedidos_mes' => $estatisticas_vendas['total_pedidos'],
+                'produtos_vendidos_mes' => $estatisticas_vendas['produtos_vendidos']
             ),
-            'produto_campeao' => $produto_campeao,
-            'revendedores' => $lojistas
+            'top_5_produtos_geral' => $top_produtos,
+            'revendedores' => $revendedores_formatados
         );
         
         return rest_ensure_response($response_data);
@@ -299,41 +323,7 @@ class Sincronizador_WC_Master_API {
             'faturamento' => $faturamento_total
         );
     }
-    
-    /**
-     * Obter produto campeão de vendas
-     */
-    private function get_produto_campeao() {
-        $sync_data = get_option('sincronizador_wc_master_sync_data', array());
-        $produtos = array();
-        
-        foreach ($sync_data as $lojista_id => $dados) {
-            if (isset($dados['vendas']['produtos_vendidos'])) {
-                foreach ($dados['vendas']['produtos_vendidos'] as $produto) {
-                    $sku = $produto['sku'] ?? $produto['nome'];
-                    if (!isset($produtos[$sku])) {
-                        $produtos[$sku] = array(
-                            'nome' => $produto['nome'],
-                            'sku' => $produto['sku'] ?? '',
-                            'vendas' => 0
-                        );
-                    }
-                    $produtos[$sku]['vendas'] += $produto['quantidade_vendida'] ?? 0;
-                }
-            }
-        }
-        
-        if (empty($produtos)) {
-            return null;
-        }
-        
-        // Ordenar por vendas
-        uasort($produtos, function($a, $b) {
-            return $b['vendas'] - $a['vendas'];
-        });
-        
-        return array_values($produtos)[0];
-    }
+
     
     /**
      * Obter vendas de um lojista específico
@@ -429,6 +419,395 @@ class Sincronizador_WC_Master_API {
         });
         
         return array_slice(array_values($produtos_consolidados), 0, $limit);
+    }
+    
+    /**
+     * Obter estatísticas de vendas da fábrica (últimos 30 dias)
+     */
+    private function get_estatisticas_vendas_fabrica() {
+        $data_inicio = date('Y-m-d', strtotime('-30 days'));
+        $data_fim = date('Y-m-d');
+        
+        $lojistas = $this->get_lojistas_data();
+        $lojistas_ativos = array_filter($lojistas, function($l) { 
+            return isset($l['ativo']) && $l['ativo']; 
+        });
+        
+        $total_vendas = 0;
+        $total_pedidos = 0;
+        $produtos_vendidos = 0;
+        
+        foreach ($lojistas_ativos as $lojista) {
+            $vendas_lojista = $this->buscar_vendas_lojista_api($lojista, $data_inicio, $data_fim);
+            
+            if ($vendas_lojista['success']) {
+                $total_vendas += $vendas_lojista['data']['total_vendas'];
+                $total_pedidos += $vendas_lojista['data']['total_pedidos'];
+                $produtos_vendidos += $vendas_lojista['data']['produtos_vendidos'];
+            }
+        }
+        
+        return array(
+            'total_vendas' => $total_vendas,
+            'total_pedidos' => $total_pedidos,
+            'produtos_vendidos' => $produtos_vendidos
+        );
+    }
+    
+    /**
+     * Obter top produtos mais vendidos geral
+     */
+    private function get_top_produtos_vendidos($limit = 5) {
+        $data_inicio = date('Y-m-d', strtotime('-30 days'));
+        $data_fim = date('Y-m-d');
+        
+        $lojistas = $this->get_lojistas_data();
+        $lojistas_ativos = array_filter($lojistas, function($l) { 
+            return isset($l['ativo']) && $l['ativo']; 
+        });
+        
+        $produtos_agregados = array();
+        
+        foreach ($lojistas_ativos as $lojista) {
+            $produtos_lojista = $this->buscar_produtos_mais_vendidos_lojista_api($lojista, $data_inicio, $data_fim);
+            
+            foreach ($produtos_lojista as $produto) {
+                $chave = $produto['sku'] ?: $produto['nome'];
+                
+                if (isset($produtos_agregados[$chave])) {
+                    $produtos_agregados[$chave]['quantidade_vendida'] += $produto['quantidade_vendida'];
+                    $produtos_agregados[$chave]['receita_total'] += $produto['receita_total'];
+                    $produtos_agregados[$chave]['lojista'] = 'Múltiplos';
+                } else {
+                    $produtos_agregados[$chave] = $produto;
+                }
+            }
+        }
+        
+        // Recalcular preço médio
+        foreach ($produtos_agregados as &$produto) {
+            if ($produto['quantidade_vendida'] > 0) {
+                $produto['preco_medio'] = $produto['receita_total'] / $produto['quantidade_vendida'];
+            }
+        }
+        
+        // Ordenar por quantidade vendida
+        uasort($produtos_agregados, function($a, $b) {
+            return $b['quantidade_vendida'] - $a['quantidade_vendida'];
+        });
+        
+        return array_slice(array_values($produtos_agregados), 0, $limit);
+    }
+    
+    /**
+     * Obter estatísticas de um lojista específico
+     */
+    private function get_estatisticas_lojista($lojista) {
+        $data_inicio = date('Y-m-d', strtotime('-30 days'));
+        $data_fim = date('Y-m-d');
+        
+        // Buscar estatísticas de vendas do lojista
+        $vendas_lojista = $this->buscar_vendas_lojista_api($lojista, $data_inicio, $data_fim);
+        
+        // Buscar estatísticas históricas (simulando - pode ser implementado no futuro)
+        $total_vendas_historico = 0;
+        
+        // Buscar status de vendas via API (simulando)
+        $status_vendas = $this->buscar_status_vendas_lojista($lojista);
+        
+        return array(
+            'total_vendas_mes' => $vendas_lojista['success'] ? $vendas_lojista['data']['total_vendas'] : 0,
+            'total_pedidos_mes' => $vendas_lojista['success'] ? $vendas_lojista['data']['total_pedidos'] : 0,
+            'produtos_vendidos_mes' => $vendas_lojista['success'] ? $vendas_lojista['data']['produtos_vendidos'] : 0,
+            'total_vendas_historico' => $total_vendas_historico,
+            'status_vendas' => $status_vendas,
+            'taxa_conversao' => '0.4%', // Valor exemplo - pode ser calculado
+            'cliente_fidelidade' => '0%' // Valor exemplo - pode ser calculado
+        );
+    }
+    
+    /**
+     * Obter top produtos de um lojista específico
+     */
+    private function get_top_produtos_lojista($lojista, $limit = 5) {
+        $data_inicio = date('Y-m-d', strtotime('-30 days'));
+        $data_fim = date('Y-m-d');
+        
+        return $this->buscar_produtos_mais_vendidos_lojista_api($lojista, $data_inicio, $data_fim, $limit);
+    }
+    
+    /**
+     * Obter últimas vendas de um lojista específico
+     */
+    private function get_ultimas_vendas_lojista($lojista, $limit = 5) {
+        return $this->buscar_ultimas_vendas_lojista_api($lojista, $limit);
+    }
+    
+    /**
+     * Buscar vendas de um lojista via API
+     */
+    private function buscar_vendas_lojista_api($lojista, $data_inicio, $data_fim) {
+        if (empty($lojista['url']) || empty($lojista['consumer_key']) || empty($lojista['consumer_secret'])) {
+            return array('success' => false, 'message' => 'Dados de conexão incompletos');
+        }
+        
+        // Converter datas para formato ISO 8601
+        $data_inicio_iso = $data_inicio . 'T00:00:00';
+        $data_fim_iso = $data_fim . 'T23:59:59';
+        
+        $url = rtrim($lojista['url'], '/') . '/wp-json/wc/v3/orders';
+        
+        $params = array(
+            'after' => $data_inicio_iso,
+            'before' => $data_fim_iso,
+            'status' => 'completed,processing,on-hold',
+            'per_page' => 100,
+            'page' => 1
+        );
+        
+        $url_com_params = add_query_arg($params, $url);
+        
+        $response = wp_remote_get($url_com_params, array(
+            'timeout' => 30,
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($lojista['consumer_key'] . ':' . $lojista['consumer_secret']),
+                'Content-Type' => 'application/json',
+                'User-Agent' => 'Sincronizador-WC/1.0'
+            )
+        ));
+        
+        if (is_wp_error($response)) {
+            return array('success' => false, 'message' => $response->get_error_message());
+        }
+        
+        $http_code = wp_remote_retrieve_response_code($response);
+        
+        if ($http_code !== 200) {
+            return array('success' => false, 'message' => "HTTP {$http_code}");
+        }
+        
+        $body = wp_remote_retrieve_body($response);
+        $pedidos = json_decode($body, true);
+        
+        if (!is_array($pedidos)) {
+            return array('success' => false, 'message' => 'Resposta inválida da API');
+        }
+        
+        // Calcular totais
+        $total_vendas = 0;
+        $total_pedidos = count($pedidos);
+        $produtos_vendidos = 0;
+        
+        foreach ($pedidos as $pedido) {
+            if (isset($pedido['total'])) {
+                $total_vendas += floatval($pedido['total']);
+            }
+            
+            if (isset($pedido['line_items'])) {
+                foreach ($pedido['line_items'] as $item) {
+                    if (isset($item['quantity'])) {
+                        $produtos_vendidos += intval($item['quantity']);
+                    }
+                }
+            }
+        }
+        
+        return array(
+            'success' => true, 
+            'data' => array(
+                'total_vendas' => $total_vendas,
+                'total_pedidos' => $total_pedidos,
+                'produtos_vendidos' => $produtos_vendidos
+            )
+        );
+    }
+    
+    /**
+     * Buscar produtos mais vendidos de um lojista via API
+     */
+    private function buscar_produtos_mais_vendidos_lojista_api($lojista, $data_inicio, $data_fim, $limit = 10) {
+        if (empty($lojista['url']) || empty($lojista['consumer_key']) || empty($lojista['consumer_secret'])) {
+            return array();
+        }
+        
+        // Primeiro, buscar pedidos do período
+        $vendas = $this->buscar_vendas_detalhadas_lojista_api($lojista, $data_inicio, $data_fim);
+        
+        if (!$vendas['success'] || empty($vendas['data']['items'])) {
+            return array();
+        }
+        
+        // Agregar produtos por nome/SKU
+        $produtos_agregados = array();
+        
+        foreach ($vendas['data']['items'] as $pedido) {
+            if (isset($pedido['line_items'])) {
+                foreach ($pedido['line_items'] as $item) {
+                    $nome = isset($item['name']) ? $item['name'] : '';
+                    $sku = isset($item['sku']) ? $item['sku'] : '';
+                    $quantidade = isset($item['quantity']) ? intval($item['quantity']) : 0;
+                    $total = isset($item['total']) ? floatval($item['total']) : 0;
+                    
+                    if (empty($nome) || $quantidade <= 0) continue;
+                    
+                    $chave = $sku ?: $nome;
+                    
+                    if (isset($produtos_agregados[$chave])) {
+                        $produtos_agregados[$chave]['quantidade_vendida'] += $quantidade;
+                        $produtos_agregados[$chave]['receita_total'] += $total;
+                    } else {
+                        $produtos_agregados[$chave] = array(
+                            'nome' => $nome,
+                            'sku' => $sku ?: 'N/A',
+                            'lojista' => $lojista['nome'],
+                            'quantidade_vendida' => $quantidade,
+                            'receita_total' => $total,
+                            'preco_medio' => 0
+                        );
+                    }
+                }
+            }
+        }
+        
+        // Calcular preço médio
+        foreach ($produtos_agregados as &$produto) {
+            if ($produto['quantidade_vendida'] > 0) {
+                $produto['preco_medio'] = $produto['receita_total'] / $produto['quantidade_vendida'];
+            }
+        }
+        
+        // Ordenar por quantidade vendida
+        uasort($produtos_agregados, function($a, $b) {
+            return $b['quantidade_vendida'] - $a['quantidade_vendida'];
+        });
+        
+        return array_slice(array_values($produtos_agregados), 0, $limit);
+    }
+    
+    /**
+     * Buscar vendas detalhadas de um lojista via API
+     */
+    private function buscar_vendas_detalhadas_lojista_api($lojista, $data_inicio, $data_fim) {
+        if (empty($lojista['url']) || empty($lojista['consumer_key']) || empty($lojista['consumer_secret'])) {
+            return array('success' => false, 'message' => 'Dados de conexão incompletos');
+        }
+        
+        $data_inicio_iso = $data_inicio . 'T00:00:00';
+        $data_fim_iso = $data_fim . 'T23:59:59';
+        
+        $url = rtrim($lojista['url'], '/') . '/wp-json/wc/v3/orders';
+        
+        $params = array(
+            'after' => $data_inicio_iso,
+            'before' => $data_fim_iso,
+            'status' => 'completed,processing,on-hold',
+            'per_page' => 100,
+            'page' => 1
+        );
+        
+        $url_com_params = add_query_arg($params, $url);
+        
+        $response = wp_remote_get($url_com_params, array(
+            'timeout' => 30,
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($lojista['consumer_key'] . ':' . $lojista['consumer_secret']),
+                'Content-Type' => 'application/json',
+                'User-Agent' => 'Sincronizador-WC/1.0'
+            )
+        ));
+        
+        if (is_wp_error($response)) {
+            return array('success' => false, 'message' => $response->get_error_message());
+        }
+        
+        $http_code = wp_remote_retrieve_response_code($response);
+        
+        if ($http_code !== 200) {
+            return array('success' => false, 'message' => "HTTP {$http_code}");
+        }
+        
+        $body = wp_remote_retrieve_body($response);
+        $pedidos = json_decode($body, true);
+        
+        if (!is_array($pedidos)) {
+            return array('success' => false, 'message' => 'Resposta inválida da API');
+        }
+        
+        return array('success' => true, 'data' => array('items' => $pedidos));
+    }
+    
+    /**
+     * Buscar últimas vendas de um lojista
+     */
+    private function buscar_ultimas_vendas_lojista_api($lojista, $limit = 5) {
+        if (empty($lojista['url']) || empty($lojista['consumer_key']) || empty($lojista['consumer_secret'])) {
+            return array();
+        }
+        
+        $url = rtrim($lojista['url'], '/') . '/wp-json/wc/v3/orders';
+        
+        $params = array(
+            'status' => 'completed,processing,on-hold',
+            'per_page' => $limit,
+            'orderby' => 'date',
+            'order' => 'desc'
+        );
+        
+        $url_com_params = add_query_arg($params, $url);
+        
+        $response = wp_remote_get($url_com_params, array(
+            'timeout' => 30,
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($lojista['consumer_key'] . ':' . $lojista['consumer_secret']),
+                'Content-Type' => 'application/json',
+                'User-Agent' => 'Sincronizador-WC/1.0'
+            )
+        ));
+        
+        if (is_wp_error($response)) {
+            return array();
+        }
+        
+        $http_code = wp_remote_retrieve_response_code($response);
+        
+        if ($http_code !== 200) {
+            return array();
+        }
+        
+        $body = wp_remote_retrieve_body($response);
+        $pedidos = json_decode($body, true);
+        
+        if (!is_array($pedidos)) {
+            return array();
+        }
+        
+        $ultimas_vendas = array();
+        
+        foreach ($pedidos as $pedido) {
+            $ultimas_vendas[] = array(
+                'id' => $pedido['id'] ?? 0,
+                'data' => $pedido['date_created'] ?? '',
+                'total' => floatval($pedido['total'] ?? 0),
+                'status' => $pedido['status'] ?? '',
+                'customer_name' => $pedido['billing']['first_name'] . ' ' . $pedido['billing']['last_name']
+            );
+        }
+        
+        return $ultimas_vendas;
+    }
+    
+    /**
+     * Buscar status de vendas de um lojista
+     */
+    private function buscar_status_vendas_lojista($lojista) {
+        // Retorna valores simulados - pode ser implementado futuramente
+        return array(
+            'vendas_pendentes' => 0,
+            'vendas_processando' => 0,
+            'vendas_concluidas' => 0,
+            'vendas_canceladas' => 0,
+            'vendas_reembolsadas' => 0
+        );
     }
     
     /**

@@ -161,6 +161,9 @@
         // Teste de conexão
         $(document).on('click', '.btn-test-connection', handleTesteConexao);
         
+    // Atualizar preços (AJAX + background)
+    $(document).on('click', '.btn-atualizar-precos', handleAtualizarPrecos);
+        
         // Validar lojista
         $(document).on('click', '#btn-validar-lojista', handleValidarLojista);
         
@@ -231,6 +234,93 @@
         }
         
         executarSincronizacao(lojistaId, lojistaName);
+    }
+
+    /**
+     * Inicia atualização de preços via AJAX (cria job e abre modal de progresso)
+     */
+    function handleAtualizarPrecos(e) {
+        e.preventDefault();
+        const btn = $(this);
+        const form = btn.closest('.form-atualizar-precos');
+        const lojistaId = form.find('input[name="lojista_id"]').val();
+        const lojistaName = btn.closest('tr').find('td').first().text().trim() || 'Lojista';
+
+        if (!lojistaId) {
+            SincronizadorModals.mostrarErro('ID do lojista não encontrado!');
+            return;
+        }
+
+        // Mostrar modal de progresso e iniciar job
+        SincronizadorModals.mostrarModalProgresso(lojistaName);
+        SincronizadorModals.atualizarProgresso(2, 'Solicitando início da atualização de preços...');
+
+        // Enviar solicitação para iniciar job
+        $.post(WC.ajaxurl, {
+            action: 'sincronizador_wc_start_price_update',
+            nonce: WC.nonce,
+            lojista_id: lojistaId
+        }).done(function(response) {
+            if (response.success) {
+                // Iniciar polling
+                pollPriceUpdateStatus(lojistaName);
+            } else {
+                SincronizadorModals.mostrarErro('Erro ao iniciar atualização: ' + (response.data || 'erro desconhecido'));
+            }
+        }).fail(function(xhr, status, err) {
+            SincronizadorModals.mostrarErro('Erro de comunicação: ' + err);
+        });
+    }
+
+    function pollPriceUpdateStatus(lojistaName) {
+        const pollInterval = 2000;
+
+        const poll = function() {
+            $.post(WC.ajaxurl, {
+                action: 'sincronizador_wc_price_update_status',
+                nonce: WC.nonce
+            }).done(function(response) {
+                if (!response.success) {
+                    SincronizadorModals.mostrarErro('Erro ao obter status: ' + (response.data || 'nenhuma resposta'));
+                    return;
+                }
+
+                const job = response.data;
+                const total = job.products_list ? job.products_list.length : 0;
+                const processed = job.processed || 0;
+                const percent = total > 0 ? Math.min(100, Math.floor((processed / total) * 100)) : (job.status === 'completed' ? 100 : 0);
+
+                SincronizadorModals.atualizarProgresso(percent, `Processados: ${processed} / ${total}`, `Atualizando preços...`);
+
+                if (job.status === 'completed' || job.status === 'failed') {
+                    // Mostrar relatório final e encerrar polling
+                    SincronizadorModals.atualizarProgresso(100, job.status === 'completed' ? 'Atualização finalizada' : 'Falha na atualização');
+                    setTimeout(function() {
+                        SincronizadorModals.fecharModalProgresso();
+                        // Mostrar relatório resumido
+                        const detalhes = (job.errors_list && job.errors_list.length) ? job.errors_list.join('<br>') : '';
+                        const dadosRelatorio = {
+                            produtos_sincronizados: job.updated || 0,
+                            produtos_criados: 0,
+                            produtos_atualizados: job.updated || 0,
+                            erros: job.errors || 0,
+                            tempo: job.finished_at || 'N/A',
+                            detalhes: detalhes
+                        };
+                        SincronizadorModals.mostrarRelatorioSync(dadosRelatorio, lojistaName);
+                    }, 600);
+                    return;
+                }
+
+                // continuar polling
+                setTimeout(poll, pollInterval);
+            }).fail(function() {
+                SincronizadorModals.mostrarErro('Falha ao consultar status do job');
+            });
+        };
+
+        // iniciar primeira chamada
+        poll();
     }
 
     function handleTesteConexao(e) {

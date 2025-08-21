@@ -308,8 +308,16 @@ class Sincronizador_WooCommerce {
                     echo '<div class="notice notice-success"><p>Sincronização de produtos iniciada!</p></div>';
                     break;
                 case 'atualizar_lojista':
-                    $this->atualizar_lojista($_POST['lojista_id']);
-                    echo '<div class="notice notice-success"><p>Dados do lojista atualizados!</p></div>';
+                    $result_update = $this->atualizar_lojista($_POST['lojista_id']);
+                    if (is_array($result_update) && isset($result_update['success']) && $result_update['success']) {
+                        echo '<div class="notice notice-success"><p>' . esc_html($result_update['message'] ?? 'Dados do lojista atualizados!') . '</p></div>';
+                        if (!empty($result_update['details'])) {
+                            $d = $result_update['details'];
+                            echo '<div class="notice notice-info"><p>Preços atualizados: ' . intval($d['updated']) . ' | Pulados: ' . intval($d['skipped']) . ' | Erros: ' . intval($d['errors']) . '</p></div>';
+                        }
+                    } else {
+                        echo '<div class="notice notice-error"><p>' . esc_html($result_update['message'] ?? 'Erro ao atualizar lojista') . '</p></div>';
+                    }
                     break;
             }
         }
@@ -359,10 +367,10 @@ class Sincronizador_WooCommerce {
                 echo '<button type="button" class="button button-secondary button-small btn-test-connection" data-lojista-id="' . $lojista['id'] . '" id="btn-test-connection-' . $lojista['id'] . '" title="Testar conexão com a loja" style="margin-right: 5px;">🔗 Testar</button>';
                 
                 // Botão Atualizar
-                echo '<form method="post" style="display:inline-block; margin-right: 5px;">';
+                echo '<form method="post" class="form-atualizar-precos" style="display:inline-block; margin-right: 5px;">';
                 echo '<input type="hidden" name="action" value="atualizar_lojista">';
                 echo '<input type="hidden" name="lojista_id" value="' . $lojista['id'] . '">';
-                echo '<button type="submit" class="button button-small" title="Atualizar dados do lojista">📊 Atualizar</button>';
+                echo '<button type="submit" class="button button-small btn-atualizar-precos" title="Atualizar dados do lojista">📊 Atualizar</button>';
                 echo '</form>';
                 
                 // Botão Editar
@@ -444,6 +452,16 @@ class Sincronizador_WooCommerce {
         }
         echo '</td>';
         echo '</tr>';
+        
+    // Campo do percentual de acréscimo
+    echo '<tr>';
+    echo '<th scope="row"><label for="percentual_acrescimo">Percentual de Acréscimo (%)</label></th>';
+    echo '<td>';
+    $valor_percentual = isset($lojista_data['percentual_acrescimo']) ? $lojista_data['percentual_acrescimo'] : ($_POST['percentual_acrescimo'] ?? '');
+    echo '<input type="number" id="percentual_acrescimo" name="percentual_acrescimo" value="' . esc_attr($valor_percentual) . '" class="regular-text" step="0.01" min="0" placeholder="0.00" />';
+    echo '<p class="description">Aplicar acréscimo percentual aos preços enviados para este lojista (ex: 10 = 10%).</p>';
+    echo '</td>';
+    echo '</tr>';
         
         echo '<tr>';
         echo '<th scope="row"><label for="ativo">Status</label></th>';
@@ -1227,12 +1245,125 @@ class Sincronizador_WooCommerce {
         }
         
         $resultado = update_option('sincronizador_wc_lojistas', $lojistas);
-        
-        // 🚀 HOOK: Disparar atualização da Master API após atualizar lojista
+
+        // Disparar hook de atualização
         if ($lojista_atualizado) {
             do_action('sincronizador_wc_lojista_updated', $lojista_atualizado);
         }
-        
+
+        // Se não salvou, retornar erro
+        if (!$resultado) {
+            return array('success' => false, 'message' => 'Erro ao salvar dados do lojista');
+        }
+
+        // Tentar atualizar preços no destino aplicando percentual_acrescimo
+        try {
+            // Re-obter lojista atualizado (para garantir dados atuais)
+            $lojista = $this->get_lojista($lojista_id);
+
+            if (!$lojista) {
+                return array('success' => false, 'message' => 'Lojista não encontrado após salvar');
+            }
+
+            $update_result = $this->atualizar_precos_loja($lojista);
+
+            return array(
+                'success' => true,
+                'message' => 'Dados do lojista atualizados e operação de preços executada',
+                'details' => $update_result
+            );
+        } catch (Exception $e) {
+            return array('success' => false, 'message' => 'Erro ao atualizar preços: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Atualiza preços do lojista remoto a partir dos preços locais da fábrica
+     * Aplica o percentual_acrescimo salvo no lojista
+     * Retorna array com contagens: updated, skipped, errors
+     */
+    private function atualizar_precos_loja($lojista) {
+        $resultado = array('updated' => 0, 'skipped' => 0, 'errors' => 0, 'errors_list' => array());
+
+        if (empty($lojista['url']) || empty($lojista['consumer_key']) || empty($lojista['consumer_secret'])) {
+            $resultado['errors']++;
+            $resultado['errors_list'][] = 'Dados de conexão incompletos para lojista ID ' . ($lojista['id'] ?? 'n/a');
+            return $resultado;
+        }
+
+        $percentual = isset($lojista['percentual_acrescimo']) ? floatval($lojista['percentual_acrescimo']) : 0.0;
+
+        // Obter produtos da fábrica (locais)
+        $produtos = $this->get_produtos_locais();
+
+        if (empty($produtos)) {
+            // Nada a fazer
+            return $resultado;
+        }
+
+        foreach ($produtos as $produto) {
+            $sku = $produto['sku'] ?? '';
+            if (empty($sku)) {
+                $resultado['skipped']++;
+                continue;
+            }
+
+            // Buscar produto no destino
+            $destino_id = $this->buscar_produto_no_destino($lojista, $sku);
+
+            if (!$destino_id) {
+                $resultado['skipped']++;
+                continue;
+            }
+
+            // Determinar preço base (usar regular_price ou sale_price)
+            $preco_base = '';
+            if (isset($produto['regular_price']) && is_numeric($produto['regular_price']) && $produto['regular_price'] !== '') {
+                $preco_base = floatval($produto['regular_price']);
+            } elseif (isset($produto['sale_price']) && is_numeric($produto['sale_price']) && $produto['sale_price'] !== '') {
+                $preco_base = floatval($produto['sale_price']);
+            } else {
+                // Tentar buscar meta price
+                $preco_base = 0;
+            }
+
+            // Calcular novo preco aplicando percentual
+            $novo_preco = $preco_base * (1 + ($percentual / 100));
+            $novo_preco_str = number_format($novo_preco, 2, '.', '');
+
+            // Preparar payload de atualização
+            $url = rtrim($lojista['url'], '/') . '/wp-json/wc/v3/products/' . intval($destino_id);
+
+            $body = json_encode(array(
+                'regular_price' => $novo_preco_str
+            ));
+
+            $response = wp_remote_request($url, array(
+                'method' => 'PUT',
+                'timeout' => 30,
+                'headers' => array(
+                    'Authorization' => 'Basic ' . base64_encode($lojista['consumer_key'] . ':' . $lojista['consumer_secret']),
+                    'Content-Type' => 'application/json'
+                ),
+                'body' => $body
+            ));
+
+            if (is_wp_error($response)) {
+                $resultado['errors']++;
+                $resultado['errors_list'][] = 'Erro ao atualizar SKU ' . $sku . ': ' . $response->get_error_message();
+                continue;
+            }
+
+            $code = wp_remote_retrieve_response_code($response);
+            if ($code >= 200 && $code < 300) {
+                $resultado['updated']++;
+            } else {
+                $resultado['errors']++;
+                $body_resp = wp_remote_retrieve_body($response);
+                $resultado['errors_list'][] = 'HTTP ' . $code . ' ao atualizar SKU ' . $sku . ' resposta: ' . substr($body_resp, 0, 200);
+            }
+        }
+
         return $resultado;
     }
     
@@ -1926,6 +2057,9 @@ class Sincronizador_WooCommerce {
         add_action('wp_ajax_sincronizador_wc_get_produtos_fabrica', array($this, 'ajax_get_produtos_fabrica'));
         // BACKUP - Garantir que a ação AJAX está registrada
         add_action('wp_ajax_sincronizador_wc_import_produtos', array($this, 'ajax_import_produtos_backup'));
+    // AJAX handlers para atualização de preços (iniciar e checar status)
+    add_action('wp_ajax_sincronizador_wc_start_price_update', array($this, 'ajax_start_price_update'));
+    add_action('wp_ajax_sincronizador_wc_price_update_status', array($this, 'ajax_price_update_status'));
         
         // AJAX handlers para sincronização
         add_action('wp_ajax_verificar_lojista_config', array($this, 'ajax_verificar_lojista_config'));
@@ -1963,6 +2097,9 @@ class Sincronizador_WooCommerce {
         
         // Registrar Master API no hook correto
         add_action('rest_api_init', array($this, 'init_master_api'));
+
+    // Cron hook para processar atualização de preços em lote
+    add_action('sincronizador_wc_process_price_update', array($this, 'process_price_update_cron'));
     }
     
     /**
@@ -2264,6 +2401,160 @@ class Sincronizador_WooCommerce {
         } else {
             wp_send_json_error($result['message']);
         }
+    }
+
+    /**
+     * AJAX: Iniciar atualização de preços (cria job em option e agenda cron)
+     */
+    public function ajax_start_price_update() {
+        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error('Sem permissão');
+        }
+
+        $lojista_id = isset($_POST['lojista_id']) ? intval($_POST['lojista_id']) : 0;
+        $lojista = $this->get_lojista($lojista_id);
+        if (!$lojista) {
+            wp_send_json_error('Lojista não encontrado');
+        }
+
+        // Criar job na opção
+        $job = array(
+            'id' => 'price_update_' . time(),
+            'lojista_id' => $lojista_id,
+            'percentual' => isset($lojista['percentual_acrescimo']) ? floatval($lojista['percentual_acrescimo']) : 0,
+            'status' => 'pending',
+            'processed' => 0,
+            'updated' => 0,
+            'skipped' => 0,
+            'errors' => 0,
+            'errors_list' => array(),
+            'created_at' => current_time('mysql')
+        );
+
+        update_option('sincronizador_wc_price_update_job', $job);
+
+        // Agendar execução imediata do cron worker
+        if (!wp_next_scheduled('sincronizador_wc_process_price_update')) {
+            wp_schedule_single_event(time() + 1, 'sincronizador_wc_process_price_update');
+        } else {
+            // Forçar execução rápida
+            wp_clear_scheduled_hook('sincronizador_wc_process_price_update');
+            wp_schedule_single_event(time() + 1, 'sincronizador_wc_process_price_update');
+        }
+
+        wp_send_json_success(array('job_id' => $job['id']));
+    }
+
+    /**
+     * AJAX: Checar status do job de atualização de preços
+     */
+    public function ajax_price_update_status() {
+        check_ajax_referer('sincronizador_wc_nonce', 'nonce');
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error('Sem permissão');
+        }
+
+        $job = get_option('sincronizador_wc_price_update_job', false);
+        if (!$job) {
+            wp_send_json_error('Nenhum job em andamento');
+        }
+
+        wp_send_json_success($job);
+    }
+
+    /**
+     * Cron worker: processa o job em lotes
+     */
+    public function process_price_update_cron() {
+        $job = get_option('sincronizador_wc_price_update_job', false);
+        if (!$job || !isset($job['lojista_id'])) {
+            return;
+        }
+
+        // Marcar em progresso
+        $job['status'] = 'running';
+        update_option('sincronizador_wc_price_update_job', $job);
+
+        $lojista = $this->get_lojista($job['lojista_id']);
+        if (!$lojista) {
+            $job['status'] = 'failed';
+            $job['errors']++;
+            $job['errors_list'][] = 'Lojista não encontrado';
+            update_option('sincronizador_wc_price_update_job', $job);
+            return;
+        }
+
+        // Processar em batches para evitar timeout
+        $batch_size = defined('SINCRONIZADOR_WC_BATCH_SIZE') ? SINCRONIZADOR_WC_BATCH_SIZE : 50;
+
+        // Obter lista de produtos locais (IDs) armazenados entre chamadas para não recalcular tudo
+        if (!isset($job['product_index'])) {
+            $produtos = $this->get_produtos_locais();
+            $job['products_list'] = array_map(function($p) { return array('id' => $p['id'], 'sku' => $p['sku'], 'regular_price' => $p['regular_price'], 'sale_price' => $p['sale_price']); }, $produtos);
+            $job['product_index'] = 0;
+        }
+
+        $total = count($job['products_list']);
+        $start = $job['product_index'];
+        $end = min($start + $batch_size, $total);
+
+        for ($i = $start; $i < $end; $i++) {
+            $p = $job['products_list'][$i];
+            $sku = $p['sku'] ?? '';
+            if (empty($sku)) {
+                $job['skipped']++;
+                $job['product_index']++;
+                continue;
+            }
+
+            $dest_id = $this->buscar_produto_no_destino($lojista, $sku);
+            if (!$dest_id) {
+                $job['skipped']++;
+                $job['product_index']++;
+                continue;
+            }
+
+            // Determinar preco base
+            $preco_base = is_numeric($p['regular_price']) && $p['regular_price'] !== '' ? floatval($p['regular_price']) : (is_numeric($p['sale_price']) && $p['sale_price'] !== '' ? floatval($p['sale_price']) : 0);
+            $novo_preco = $preco_base * (1 + ($job['percentual'] / 100));
+            $novo_preco_str = number_format($novo_preco, 2, '.', '');
+
+            $url = rtrim($lojista['url'], '/') . '/wp-json/wc/v3/products/' . intval($dest_id);
+            $response = wp_remote_request($url, array('method' => 'PUT', 'timeout' => 30, 'headers' => array('Authorization' => 'Basic ' . base64_encode($lojista['consumer_key'] . ':' . $lojista['consumer_secret']), 'Content-Type' => 'application/json'), 'body' => json_encode(array('regular_price' => $novo_preco_str))));
+
+            if (is_wp_error($response)) {
+                $job['errors']++;
+                $job['errors_list'][] = 'Erro SKU ' . $sku . ': ' . $response->get_error_message();
+            } else {
+                $code = wp_remote_retrieve_response_code($response);
+                if ($code >= 200 && $code < 300) {
+                    $job['updated']++;
+                } else {
+                    $job['errors']++;
+                    $job['errors_list'][] = 'HTTP ' . $code . ' SKU ' . $sku;
+                }
+            }
+
+            $job['processed']++;
+            $job['product_index']++;
+        }
+
+        // Se ainda há produtos, re-agendar
+        if ($job['product_index'] < $total) {
+            update_option('sincronizador_wc_price_update_job', $job);
+            // Agendar próxima execução imediata
+            wp_schedule_single_event(time() + 1, 'sincronizador_wc_process_price_update');
+            return;
+        }
+
+        // Finalizar job
+        $job['status'] = 'completed';
+        $job['finished_at'] = current_time('mysql');
+        update_option('sincronizador_wc_price_update_job', $job);
+
+        // Disparar ação pós-processo
+        do_action('sincronizador_wc_price_update_completed', $job);
     }
     
     /**

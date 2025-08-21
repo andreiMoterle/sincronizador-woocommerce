@@ -178,26 +178,27 @@ class Sincronizador_WC_Master_API {
      */
     public function get_revendedores_detalhado($request) {
         $lojistas = $this->get_lojistas_data();
-        
+
         $revendedores_detalhado = array();
-        
+
         foreach ($lojistas as $lojista) {
-            $vendas_lojista = $this->get_vendas_lojista($lojista);
-            $produtos_lojista = $this->get_produtos_lojista($lojista);
-            
+            $estatisticas_gerais = $this->get_estatisticas_lojista($lojista);
+            $top_produtos = $this->get_top_produtos_lojista($lojista, 5);
+            $ultimas_vendas = $this->get_ultimas_vendas_lojista($lojista, 5);
+
             $revendedores_detalhado[] = array(
                 'id' => $lojista['id'],
                 'nome' => $lojista['nome'],
-                'url' => $lojista['url'], 
+                'url' => $lojista['url'],
                 'status' => isset($lojista['ativo']) && $lojista['ativo'] ? 'ativo' : 'inativo',
-                'ultima_sincronizacao' => $lojista['ultima_sync'] ?? null,
-                'produtos_sincronizados' => $produtos_lojista['total'],
-                'vendas_mes' => $vendas_lojista['vendas'],
-                'faturamento_mes' => $vendas_lojista['faturamento'],
-                'produto_mais_vendido' => $vendas_lojista['produto_top'] ?? null
+                'ultima_sync' => $lojista['ultima_sync'] ?? null,
+                'criado_em' => $lojista['criado_em'] ?? null,
+                'estatisticas_gerais' => $estatisticas_gerais,
+                'top_5_produtos' => $top_produtos,
+                'ultimas_vendas' => $ultimas_vendas
             );
         }
-        
+
         return rest_ensure_response($revendedores_detalhado);
     }
     
@@ -207,9 +208,53 @@ class Sincronizador_WC_Master_API {
     public function get_produtos_top($request) {
         $limit = $request->get_param('limit') ?: 10;
         $period = $request->get_param('period') ?: 30;
-        
+
         $produtos_top = $this->buscar_produtos_mais_vendidos($limit, $period);
-        
+
+        // Se não houver produtos, buscar diretamente dos pedidos dos lojistas ativos
+        if (empty($produtos_top)) {
+            $data_inicio = date('Y-m-d', strtotime("-{$period} days"));
+            $data_fim = date('Y-m-d');
+            $lojistas = $this->get_lojistas_data();
+            $lojistas_ativos = array_filter($lojistas, function($l) { return isset($l['ativo']) && $l['ativo']; });
+            $produtos_agregados = array();
+            foreach ($lojistas_ativos as $lojista) {
+                $vendas = $this->buscar_vendas_detalhadas_lojista_api($lojista, $data_inicio, $data_fim);
+                if ($vendas['success'] && isset($vendas['data']['items'])) {
+                    foreach ($vendas['data']['items'] as $pedido) {
+                        if (isset($pedido['line_items'])) {
+                            foreach ($pedido['line_items'] as $item) {
+                                $nome = isset($item['name']) ? $item['name'] : '';
+                                $sku = isset($item['sku']) ? $item['sku'] : '';
+                                $quantidade = isset($item['quantity']) ? intval($item['quantity']) : 0;
+                                $total = isset($item['total']) ? floatval($item['total']) : 0;
+                                if (empty($nome) || $quantidade <= 0) continue;
+                                if (!isset($produtos_agregados[$sku])) {
+                                    $produtos_agregados[$sku] = array(
+                                        'nome' => $nome,
+                                        'sku' => $sku,
+                                        'quantidade_vendida' => 0,
+                                        'receita_total' => 0,
+                                        'lojista_url' => $lojista['url']
+                                    );
+                                }
+                                $produtos_agregados[$sku]['quantidade_vendida'] += $quantidade;
+                                $produtos_agregados[$sku]['receita_total'] += $total;
+                                // Se o produto já existe, manter o lojista do maior vendedor
+                                if ($quantidade > $produtos_agregados[$sku]['quantidade_vendida']) {
+                                    $produtos_agregados[$sku]['lojista_url'] = $lojista['url'];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            uasort($produtos_agregados, function($a, $b) {
+                return $b['quantidade_vendida'] - $a['quantidade_vendida'];
+            });
+            $produtos_top = array_slice(array_values($produtos_agregados), 0, $limit);
+        }
+
         return rest_ensure_response($produtos_top);
     }
     
@@ -392,12 +437,12 @@ class Sincronizador_WC_Master_API {
     private function buscar_produtos_mais_vendidos($limit = 10, $period = 30) {
         $sync_data = get_option('sincronizador_wc_master_sync_data', array());
         $produtos_consolidados = array();
-        
+
         foreach ($sync_data as $lojista_id => $dados) {
-            if (isset($dados['vendas']['produtos_vendidos'])) {
+            // Se não houver produtos_vendidos, buscar dos pedidos
+            if (isset($dados['vendas']['produtos_vendidos']) && !empty($dados['vendas']['produtos_vendidos'])) {
                 foreach ($dados['vendas']['produtos_vendidos'] as $produto) {
                     $sku = $produto['sku'] ?? $produto['nome'];
-                    
                     if (!isset($produtos_consolidados[$sku])) {
                         $produtos_consolidados[$sku] = array(
                             'nome' => $produto['nome'],
@@ -406,18 +451,40 @@ class Sincronizador_WC_Master_API {
                             'receita_total' => 0
                         );
                     }
-                    
                     $produtos_consolidados[$sku]['quantidade_vendida'] += $produto['quantidade_vendida'] ?? 0;
                     $produtos_consolidados[$sku]['receita_total'] += $produto['receita_total'] ?? 0;
                 }
+            } elseif (isset($dados['vendas']['pedidos']) && is_array($dados['vendas']['pedidos'])) {
+                // Buscar dos pedidos sincronizados
+                foreach ($dados['vendas']['pedidos'] as $pedido) {
+                    if (isset($pedido['line_items'])) {
+                        foreach ($pedido['line_items'] as $item) {
+                            $nome = isset($item['name']) ? $item['name'] : '';
+                            $sku = isset($item['sku']) ? $item['sku'] : $nome;
+                            $quantidade = isset($item['quantity']) ? intval($item['quantity']) : 0;
+                            $total = isset($item['total']) ? floatval($item['total']) : 0;
+                            if (empty($nome) || $quantidade <= 0) continue;
+                            if (!isset($produtos_consolidados[$sku])) {
+                                $produtos_consolidados[$sku] = array(
+                                    'nome' => $nome,
+                                    'sku' => $sku,
+                                    'quantidade_vendida' => 0,
+                                    'receita_total' => 0
+                                );
+                            }
+                            $produtos_consolidados[$sku]['quantidade_vendida'] += $quantidade;
+                            $produtos_consolidados[$sku]['receita_total'] += $total;
+                        }
+                    }
+                }
             }
         }
-        
+
         // Ordenar por quantidade vendida
         uasort($produtos_consolidados, function($a, $b) {
             return $b['quantidade_vendida'] - $a['quantidade_vendida'];
         });
-        
+
         return array_slice(array_values($produtos_consolidados), 0, $limit);
     }
     
@@ -505,24 +572,80 @@ class Sincronizador_WC_Master_API {
     private function get_estatisticas_lojista($lojista) {
         $data_inicio = date('Y-m-d', strtotime('-30 days'));
         $data_fim = date('Y-m-d');
-        
-        // Buscar estatísticas de vendas do lojista
-        $vendas_lojista = $this->buscar_vendas_lojista_api($lojista, $data_inicio, $data_fim);
-        
-        // Buscar estatísticas históricas (simulando - pode ser implementado no futuro)
+
+        // Buscar estatísticas de vendas detalhadas do lojista (últimos 30 dias)
+        $vendas_lojista = $this->buscar_vendas_detalhadas_lojista_api($lojista, $data_inicio, $data_fim);
+
+        $total_vendas_mes = 0;
+        $total_pedidos_mes = 0;
+        $produtos_vendidos_mes = 0;
+        $status_vendas = [
+            'vendas_pendentes' => 0,
+            'vendas_processando' => 0,
+            'vendas_concluidas' => 0,
+            'vendas_canceladas' => 0,
+            'vendas_reembolsadas' => 0
+        ];
+        $clientes = [];
+
+        if ($vendas_lojista['success'] && isset($vendas_lojista['data']['items'])) {
+            foreach ($vendas_lojista['data']['items'] as $pedido) {
+                $total_pedidos_mes++;
+                $total_vendas_mes += isset($pedido['total']) ? floatval($pedido['total']) : 0;
+                if (isset($pedido['line_items'])) {
+                    foreach ($pedido['line_items'] as $item) {
+                        $produtos_vendidos_mes += intval($item['quantity'] ?? 0);
+                    }
+                }
+                // Status dos pedidos
+                switch ($pedido['status'] ?? '') {
+                    case 'pending': $status_vendas['vendas_pendentes']++; break;
+                    case 'processing': $status_vendas['vendas_processando']++; break;
+                    case 'completed': $status_vendas['vendas_concluidas']++; break;
+                    case 'cancelled': $status_vendas['vendas_canceladas']++; break;
+                    case 'refunded': $status_vendas['vendas_reembolsadas']++; break;
+                }
+                // Cliente fidelidade
+                if (isset($pedido['billing']['email'])) {
+                    $clientes[] = strtolower(trim($pedido['billing']['email']));
+                }
+            }
+        }
+
+        // Buscar estatísticas históricas (todos os pedidos desde o início)
+        $vendas_historico = $this->buscar_vendas_detalhadas_lojista_api($lojista, '2000-01-01', date('Y-m-d'));
         $total_vendas_historico = 0;
-        
-        // Buscar status de vendas via API (simulando)
-        $status_vendas = $this->buscar_status_vendas_lojista($lojista);
-        
+        $total_pedidos_historico = 0;
+        if ($vendas_historico['success'] && isset($vendas_historico['data']['items'])) {
+            foreach ($vendas_historico['data']['items'] as $pedido) {
+                $total_vendas_historico += isset($pedido['total']) ? floatval($pedido['total']) : 0;
+                $total_pedidos_historico++;
+            }
+        }
+
+        // Taxa de conversão: pedidos concluídos / total pedidos
+        $taxa_conversao = $total_pedidos_mes > 0 ? ($status_vendas['vendas_concluidas'] / $total_pedidos_mes) * 100 : 0;
+
+        // Cliente fidelidade: clientes com mais de 1 pedido / total clientes
+        $clientes_count = count($clientes);
+        $clientes_fieis = 0;
+        if ($clientes_count > 0) {
+            $clientes_freq = array_count_values($clientes);
+            foreach ($clientes_freq as $count) {
+                if ($count > 1) $clientes_fieis++;
+            }
+        }
+        $percent_fidelidade = $clientes_count > 0 ? ($clientes_fieis / $clientes_count) * 100 : 0;
+
         return array(
-            'total_vendas_mes' => $vendas_lojista['success'] ? $vendas_lojista['data']['total_vendas'] : 0,
-            'total_pedidos_mes' => $vendas_lojista['success'] ? $vendas_lojista['data']['total_pedidos'] : 0,
-            'produtos_vendidos_mes' => $vendas_lojista['success'] ? $vendas_lojista['data']['produtos_vendidos'] : 0,
+            'total_vendas_mes' => $total_vendas_mes,
+            'total_pedidos_mes' => $total_pedidos_mes,
+            'produtos_vendidos_mes' => $produtos_vendidos_mes,
             'total_vendas_historico' => $total_vendas_historico,
+            'total_pedidos_historico' => $total_pedidos_historico,
             'status_vendas' => $status_vendas,
-            'taxa_conversao' => '0.4%', // Valor exemplo - pode ser calculado
-            'cliente_fidelidade' => '0%' // Valor exemplo - pode ser calculado
+            'taxa_conversao' => number_format($taxa_conversao, 1) . '%',
+            'cliente_fidelidade' => number_format($percent_fidelidade, 1) . '%'
         );
     }
     

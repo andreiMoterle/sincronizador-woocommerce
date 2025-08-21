@@ -2167,7 +2167,7 @@ class Sincronizador_WooCommerce {
      */
     public function schedule_cache_cleanup() {
         if (!wp_next_scheduled('sincronizador_wc_cleanup_cache')) {
-            wp_schedule_event(time(), 'hourly', 'sincronizador_wc_cleanup_cache');
+            wp_schedule_event(time(), 'daily', 'sincronizador_wc_cleanup_cache');
         }
     }
     

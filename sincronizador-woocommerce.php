@@ -3258,68 +3258,10 @@ class Sincronizador_WooCommerce {
         // Buscar variações completas se for produto variável
         $variacoes_completas = array();
         if ($this->produto_tem_variacoes($produto_fabrica)) {
-            $variacoes_destino = $this->get_variacoes_destino($lojista_data, $produto_id_destino);
-            $variacoes_fabrica = $produto_fabrica->get_children();
-            
-            // Mapear variações da fábrica com as variações do destino pelos IDs
-            foreach ($variacoes_fabrica as $variacao_id) {
-                $variacao_fabrica = wc_get_product($variacao_id);
-                if (!$variacao_fabrica) continue;
-                
-                // Buscar variação correspondente no destino pelo ID da fábrica
-                // As variações da fábrica deveriam ter o mesmo ID no destino se foram sincronizadas corretamente
-                $variacao_destino = null;
-                $variacao_id_destino = null;
-                
-                // Procurar pela variação correspondente no destino
-                if (!empty($variacoes_destino)) {
-                    // Primeiro, tentar encontrar por ID direto (se os IDs coincidirem)
-                    foreach ($variacoes_destino as $var_dest) {
-                        if ($var_dest['id'] == $variacao_id) {
-                            $variacao_destino = $var_dest;
-                            $variacao_id_destino = $var_dest['id'];
-
-                            break;
-                        }
-                    }
-                }
-                
-                if (!$variacao_destino) {
-
-                    continue;
-                }
-                
-                // Buscar vendas específicas desta variação - usar ID da fábrica que é o correto no JSON
-                $vendas_desta_variacao = 0;
-                if (!empty($vendas_por_variacao)) {
-                    foreach ($vendas_por_variacao as $venda_var) {
-                        // O JSON usa os IDs da fábrica, não do destino
-                        if ($venda_var['variacao_id'] == $variacao_id) {
-                            $vendas_desta_variacao = $venda_var['vendas'];
-
-                            break;
-                        }
-                    }
-                    if ($vendas_desta_variacao === 0) {
-
-                    }
-                } else {
-
-                }
-                
-                $variacoes_completas[] = array(
-                    'id_fabrica' => $variacao_id,
-                    'id_destino' => $variacao_destino['id'] ?? null,
-                    'sku' => $variacao_fabrica->get_sku(),
-                    'atributos' => $this->get_atributos_variacao($variacao_fabrica),
-                    'preco_fabrica' => $this->formatar_preco_produto($variacao_fabrica),
-                    'preco_destino' => $this->formatar_preco_variacao_destino($variacao_destino),
-                    'estoque_fabrica' => $variacao_fabrica->get_stock_quantity() ?: 0,
-                    'estoque_destino' => $variacao_destino['stock_quantity'] ?? 0,
-                    'vendas' => $vendas_desta_variacao,
-                    'status' => $variacao_destino ? 'sincronizado' : 'não_sincronizado'
-                );
-            }
+            // Reutilizar a função otimizada que já tenta vários matches e coleta vendas por variação
+            $dados_destino_para_matching = $dados_destino;
+            $dados_destino_para_matching['lojista_data'] = $lojista_data;
+            $variacoes_completas = $this->get_variacoes_produto_optimized($produto_fabrica, $dados_destino_para_matching);
         }
         
         // Montar resposta com dados completos
@@ -3332,8 +3274,8 @@ class Sincronizador_WooCommerce {
             'status' => 'sincronizado',
             'preco_fabrica' => $this->formatar_preco_produto($produto_fabrica),
             'preco_destino' => $this->formatar_preco_destino($dados_destino),
-            'estoque_fabrica' => $produto_fabrica->get_stock_quantity() ?: 0,
-            'estoque_destino' => $dados_destino['stock_quantity'] ?? 0,
+            'estoque_fabrica' => ($produto_fabrica->get_stock_quantity() !== null && $produto_fabrica->get_stock_quantity() !== '') ? $produto_fabrica->get_stock_quantity() : 0,
+            'estoque_destino' => (isset($dados_destino['stock_quantity']) && $dados_destino['stock_quantity'] !== null && $dados_destino['stock_quantity'] !== '') ? $dados_destino['stock_quantity'] : 0,
             'vendas' => $vendas_total,
             'tem_variacoes' => $this->produto_tem_variacoes($produto_fabrica),
             'variacoes' => $variacoes_completas,
@@ -3382,24 +3324,19 @@ class Sincronizador_WooCommerce {
         // Fazer batch request para obter todos os produtos de uma vez
         $produtos_ids_destino = array_values($historico_envios[$lojista_url]);
         $dados_produtos_destino = $this->get_produtos_destino_batch($lojista_data, $produtos_ids_destino);
-        
+
         foreach ($historico_envios[$lojista_url] as $produto_id_fabrica => $produto_id_destino) {
             $produto_fabrica = wc_get_product($produto_id_fabrica);
-            
             if (!$produto_fabrica) {
                 continue;
             }
-            
             // Usar dados do batch ao invés de requisição individual
-            $dados_destino = isset($dados_produtos_destino[$produto_id_destino]) ? 
-                            $dados_produtos_destino[$produto_id_destino] : false;
-            
+            $dados_destino = isset($dados_produtos_destino[$produto_id_destino]) ? $dados_produtos_destino[$produto_id_destino] : false;
             // Se produto não existe mais no destino, remover do histórico
             if (!$dados_destino) {
                 unset($historico_envios[$lojista_url][$produto_id_fabrica]);
                 continue;
             }
-            
             // Obter vendas (com cache individual) e normalizar para inteiro
             $vendas_data = $this->get_vendas_produto_destino_cached($lojista_data, $produto_id_destino);
             $vendas_total = 0;
@@ -3414,28 +3351,24 @@ class Sincronizador_WooCommerce {
             } else {
                 $vendas_total = intval($vendas_data ?? 0);
             }
-            
             // Verificar se produto tem variações
             $tem_variacoes = $this->produto_tem_variacoes($produto_fabrica);
             $variacoes_info = array();
-            
             if ($tem_variacoes && $dados_destino) {
+                // Passar lojista_data para get_variacoes_produto_optimized
+                $dados_destino['lojista_data'] = $lojista_data;
                 $variacoes_info = $this->get_variacoes_produto_optimized($produto_fabrica, $dados_destino);
             }
-            
-            // STATUS DE PUBLICAÇÃO no destino
-            $status_publicacao = $dados_destino['status'] ?? 'unknown';
-            
             $produto_data = array(
                 'id_fabrica' => $produto_fabrica->get_id(),
                 'id_destino' => $produto_id_destino,
                 'nome' => $produto_fabrica->get_name(),
                 'sku' => $produto_fabrica->get_sku(),
                 'imagem' => wp_get_attachment_image_url($produto_fabrica->get_image_id(), 'thumbnail') ?: 'https://via.placeholder.com/50x50',
-                'status' => $status_publicacao,
+                'status' => $dados_destino['status'] ?? 'unknown',
                 'preco_fabrica' => $this->formatar_preco_produto($produto_fabrica),
                 'preco_destino' => $this->formatar_preco_destino($dados_destino),
-                'estoque_fabrica' => $produto_fabrica->get_stock_quantity() ?: 0,
+                'estoque_fabrica' => ($produto_fabrica->get_stock_quantity() !== null && $produto_fabrica->get_stock_quantity() !== '') ? $produto_fabrica->get_stock_quantity() : 0,
                 'estoque_destino' => $this->get_estoque_real_destino($dados_destino),
                 'vendas' => $vendas_total,
                 'ultima_sync' => $dados_destino['date_modified'] ?? null,
@@ -3443,7 +3376,6 @@ class Sincronizador_WooCommerce {
                 'variacoes' => $variacoes_info,
                 'tipo_produto' => $tem_variacoes ? 'variável' : 'simples'
             );
-            
             $produtos_sincronizados[] = $produto_data;
         }
         
@@ -3462,8 +3394,8 @@ class Sincronizador_WooCommerce {
             }
         }
         
-        // 🚀 HOOK: Atualizar dados da Master API após sincronização
-        do_action('sincronizador_wc_sync_completed', $lojista, $produtos_sincronizados);
+    // 🚀 HOOK: Atualizar dados da Master API após sincronização
+    // Removido do_action com $lojista indefinido
         
         return $produtos_sincronizados;
     }
@@ -3511,122 +3443,363 @@ class Sincronizador_WooCommerce {
      */
     private function get_variacoes_produto_optimized($produto_fabrica, $dados_produto_destino) {
         $variacoes = array();
-        
         if (!$this->produto_tem_variacoes($produto_fabrica)) {
             return $variacoes;
         }
-        
-        // Obter variações da fábrica
+
         $variacoes_fabrica = $produto_fabrica->get_children();
-        
         if (empty($variacoes_fabrica)) {
             return $variacoes;
         }
-        
-        // Se o produto destino já tem dados, usar eles para economizar requisições
-        foreach ($variacoes_fabrica as $variacao_id) {
-            $variacao_fabrica = wc_get_product($variacao_id);
-            
-            if (!$variacao_fabrica) {
-                continue;
+
+        // Função para extrair atributos relevantes (cor, tamanho) de uma variação
+        $extrair_atributos = function($variacao) {
+            $attrs = array();
+            // Caso: resposta da API em array
+            if (is_array($variacao) && isset($variacao['attributes'])) {
+                foreach ($variacao['attributes'] as $att) {
+                    // Compatível com estrutura API: ['id'=>..., 'name'=>..., 'option'=>...]
+                    if (is_array($att)) {
+                        $name = isset($att['name']) ? strtolower(trim(str_replace('pa_', '', $att['name']))) : '';
+                        $option = isset($att['option']) ? strtolower(trim($att['option'])) : '';
+                    } else {
+                        // fallback genérico
+                        $name = '';
+                        $option = '';
+                    }
+                    if ($name !== '') { $attrs[$name] = $option; }
+                }
+                return $attrs;
             }
-            
-            $variacoes[] = array(
-                'id_fabrica' => $variacao_id,
-                'id_destino' => null, // Seria necessário outra requisição, omitir por performance
-                'sku' => $variacao_fabrica->get_sku(),
-                'atributos' => $this->get_atributos_variacao($variacao_fabrica),
-                'preco_fabrica' => $this->formatar_preco_produto($variacao_fabrica),
-                'preco_destino' => 0, // Seria necessário outra requisição, omitir por performance
-                'estoque_fabrica' => $variacao_fabrica->get_stock_quantity() ?: 0,
-                'estoque_destino' => 0, // Seria necessário outra requisição, omitir por performance
-                'status' => 'sincronizado' // STATUS DE SINCRONIZAÇÃO: assumir sincronizado se produto principal está sincronizado
-            );
+
+            // Caso: objeto WC_Product_Variation ou similar
+            if (is_object($variacao)) {
+                // Preferir get_variation_attributes quando disponível (retorna chave => valor)
+                if (method_exists($variacao, 'get_variation_attributes')) {
+                    $raw = $variacao->get_variation_attributes();
+                    if (is_array($raw)) {
+                        foreach ($raw as $name => $option) {
+                            // Normalizar chaves como 'attribute_pa_tamanho', 'pa_tamanho', 'tamanho'
+                            $n = strtolower(trim($name));
+                            $n = preg_replace('/^attribute_/', '', $n);
+                            $n = preg_replace('/^attribute-/', '', $n);
+                            $n = preg_replace('/^pa_/', '', $n);
+                            $n = preg_replace('/^pa-/', '', $n);
+                            $option_val = $option;
+                            if (is_array($option_val)) { $option_val = reset($option_val) ?: ''; }
+                            $attrs[$n] = strtolower(trim((string)$option_val));
+                        }
+                        return $attrs;
+                    }
+                }
+
+                // Fallback: get_attributes
+                if (method_exists($variacao, 'get_attributes')) {
+                    $raw = $variacao->get_attributes();
+                    if (is_array($raw) && !empty($raw)) {
+                        foreach ($raw as $name => $option) {
+                            $n = strtolower(trim($name));
+                            $n = preg_replace('/^attribute_/', '', $n);
+                            $n = preg_replace('/^attribute-/', '', $n);
+                            $n = preg_replace('/^pa_/', '', $n);
+                            $n = preg_replace('/^pa-/', '', $n);
+                            if (is_array($option)) { $option = reset($option) ?: ''; }
+                            $attrs[$n] = $this->normalizar_valor_atributo($option);
+                        }
+                        return $attrs;
+                    }
+                }
+
+                // Último recurso: ler do post meta da variação (attribute_...)
+                if (method_exists($variacao, 'get_id')) {
+                    $vid = $variacao->get_id();
+                    if ($vid) {
+                        $meta = get_post_meta($vid);
+                        if (is_array($meta) && !empty($meta)) {
+                            foreach ($meta as $mkey => $mval) {
+                                if (strpos($mkey, 'attribute_') === 0) {
+                                    $nm = strtolower(trim(str_replace('attribute_', '', $mkey)));
+                                    $nm = preg_replace('/^pa_/', '', $nm);
+                                    $val = '';
+                                    if (is_array($mval)) { $val = reset($mval); } else { $val = $mval; }
+                                    $attrs[$nm] = strtolower(trim((string)$val));
+                                }
+                            }
+                            if (!empty($attrs)) {
+                                return $attrs;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return $attrs;
+        };
+
+        // Buscar vendas por variação direto do endpoint customizado (tabela wp_sincronizador_vendas)
+        $vendas_por_variacao = array();
+        $lojista_data = $dados_produto_destino['lojista_data'] ?? null;
+        $produto_id_destino = $dados_produto_destino['id'] ?? null;
+        $variacoes_destino = array();
+        if ($lojista_data && $produto_id_destino) {
+            $endpoint = trailingslashit($lojista_data['url']) . 'wp-json/sincronizador/v1/vendas-simples/' . $produto_id_destino;
+            $response = wp_remote_get($endpoint, array('timeout' => 10, 'headers' => array('Content-Type' => 'application/json')));
+                if (!is_wp_error($response)) {
+                    $code = wp_remote_retrieve_response_code($response);
+                    $body = wp_remote_retrieve_body($response);
+                    if ($code === 200) {
+                        $data = json_decode($body, true);
+                        if (isset($data['vendas_por_variacao']) && is_array($data['vendas_por_variacao'])) {
+                            $vendas_por_variacao = $data['vendas_por_variacao'];
+                        }
+                    }
+                }
+
+            $variacoes_destino = $this->get_variacoes_destino($lojista_data, $produto_id_destino);
+            // Logar variacoes_destino se estiver vazio para entender por que não retornou variações
+            // variacoes_destino carregadas (se houver)
         }
-        
+
+        // Pré-processar mapas de vendas para correspondência rápida
+        $vendas_by_dest_id = array();
+        $vendas_by_factory_id = array();
+        $vendas_by_sku = array();
+        $vendas_by_attr_values = array(); // chave: valores ordenados concatenados
+
+        foreach ($vendas_por_variacao as $var) {
+            $v_vendas = isset($var['vendas']) ? intval($var['vendas']) : 0;
+            if (isset($var['variacao_id'])) {
+                $id = intval($var['variacao_id']);
+                $vendas_by_dest_id[$id] = $v_vendas;
+                $vendas_by_factory_id[$id] = $v_vendas; // guardar também como possível id_fabrica
+            }
+            if (!empty($var['sku'])) {
+                $vendas_by_sku[$var['sku']] = $v_vendas;
+            }
+            // atributos podem vir como array ou string
+            $attrs_vals = array();
+            if (isset($var['attributes']) && is_array($var['attributes'])) {
+                foreach ($var['attributes'] as $k => $vv) {
+                    $attrs_vals[] = strtolower(trim($vv));
+                }
+            } elseif (isset($var['atributos']) && is_string($var['atributos'])) {
+                $parts = array_map('trim', explode(',', $var['atributos']));
+                foreach ($parts as $p) {
+                    if (strpos($p, ':') !== false) {
+                        list(,$vpart) = array_map('trim', explode(':', $p, 2));
+                        $attrs_vals[] = strtolower($vpart);
+                    }
+                }
+            }
+            if (!empty($attrs_vals)) {
+                sort($attrs_vals);
+                $key = implode('|', $attrs_vals);
+                $vendas_by_attr_values[$key] = $v_vendas;
+            }
+        }
+
+        // Pré-processar atributos das variações do destino para matching por valores
+        $dest_variations_by_attr_values = array();
+        $dest_variations_by_sku = array();
+        foreach ($variacoes_destino as $v_dest) {
+            $attrs_dest = $extrair_atributos($v_dest);
+            $vals = array();
+            if (!empty($attrs_dest)) {
+                foreach ($attrs_dest as $vv) { $vals[] = $this->normalizar_valor_atributo($vv); }
+                sort($vals);
+                $k = implode('|', $vals);
+                $dest_variations_by_attr_values[$k] = $v_dest;
+            }
+            if (!empty($v_dest['sku'])) {
+                $dest_variations_by_sku[$v_dest['sku']] = $v_dest;
+            }
+        }
+
+    $idx_loop = 0;
+    foreach ($variacoes_fabrica as $variacao_id) {
+            $variacao_fabrica = wc_get_product($variacao_id);
+            if (!$variacao_fabrica) continue;
+            $attrs_fabrica = $extrair_atributos($variacao_fabrica);
+
+            // debug statements removed
+
+            // Procurar variação correspondente no destino
+            $variacao_destino = null;
+            // 1) Tentar por SKU (caso variações mantenham o mesmo SKU)
+            if (!empty($variacoes_destino)) {
+                foreach ($variacoes_destino as $v_dest) {
+                    if (!empty($v_dest['sku']) && $variacao_fabrica->get_sku() && $v_dest['sku'] === $variacao_fabrica->get_sku()) {
+                        $variacao_destino = $v_dest;
+                        break;
+                    }
+                }
+            }
+            // 2) Se não encontrou por SKU, tentar por atributos
+            if (!$variacao_destino) {
+                foreach ($variacoes_destino as $v_dest) {
+                    $attrs_destino = $extrair_atributos($v_dest);
+                    if ($attrs_fabrica == $attrs_destino) {
+                        $variacao_destino = $v_dest;
+                        break;
+                    }
+                }
+            }
+
+            // 3) Fallback por índice/posição: se quantidade de variações for igual,
+            // assumir que a ordem corresponde e mapear pela posição (último recurso)
+                if (!$variacao_destino && !empty($variacoes_destino) && count($variacoes_destino) === count($variacoes_fabrica)) {
+                    $fallback_dest = $variacoes_destino[$idx_loop] ?? null;
+                    if ($fallback_dest) {
+                        $variacao_destino = $fallback_dest;
+                    }
+                }
+
+            // Buscar vendas_por_variacao. Tentamos corresponder por:
+            // 1) variacao_id do destino (quando o endpoint usa IDs do destino)
+            // 2) variacao_id da fábrica (compatibilidade)
+            // 3) sku
+            // 4) atributos (o endpoint pode retornar string "Cor: branco, Tamanho: m")
+            $vendas_destino = 0;
+            if (!empty($vendas_por_variacao)) {
+                foreach ($vendas_por_variacao as $var) {
+                    // Normalize vendas
+                    $var_vendas = isset($var['vendas']) ? intval($var['vendas']) : 0;
+
+                    // 1) variacao_id do destino
+                    if (isset($var['variacao_id']) && $variacao_destino && intval($var['variacao_id']) === intval($variacao_destino['id'])) {
+                        $vendas_destino = $var_vendas;
+                        break;
+                    }
+
+                    // 2) variacao_id da fábrica (compatibilidade)
+                    if (isset($var['variacao_id']) && intval($var['variacao_id']) === intval($variacao_id)) {
+                        $vendas_destino = $var_vendas;
+                        break;
+                    }
+
+                    // 3) SKU
+                    if (isset($var['sku']) && $variacao_fabrica->get_sku() && $var['sku'] === $variacao_fabrica->get_sku()) {
+                        $vendas_destino = $var_vendas;
+                        break;
+                    }
+
+                    // 4) Atributos (podem vir como array ou string)
+                    $attrs_var = array();
+                    if (isset($var['attributes']) && is_array($var['attributes'])) {
+                        $attrs_var = array_change_key_case($var['attributes'], CASE_LOWER);
+                    } elseif (isset($var['atributos']) && is_string($var['atributos'])) {
+                        // Ex: "Cor: branco, Tamanho: m" -> ['cor'=>'branco','tamanho'=>'m']
+                        $parts = array_map('trim', explode(',', $var['atributos']));
+                        foreach ($parts as $p) {
+                            if (strpos($p, ':') !== false) {
+                                list($k, $v) = array_map('trim', explode(':', $p, 2));
+                                $k = strtolower(str_replace('pa_', '', $k));
+                                $v = strtolower($v);
+                                if ($k !== '') { $attrs_var[$k] = $v; }
+                            }
+                        }
+                    }
+
+                    // Checar mapa pré-processado por valores de atributos (mais rápido)
+                    if (!empty($attrs_fabrica)) {
+                        $vals = array();
+                        foreach ($attrs_fabrica as $vv) { $vals[] = $this->normalizar_valor_atributo($vv); }
+                        sort($vals);
+                        $k = implode('|', $vals);
+                        if (isset($vendas_by_attr_values[$k])) {
+                            $vendas_destino = intval($vendas_by_attr_values[$k]);
+                            break;
+                        }
+                    }
+
+                    if (!empty($attrs_var) && !empty($attrs_fabrica)) {
+                        $match = true;
+                        foreach ($attrs_fabrica as $k => $v) {
+                            $k_low = strtolower($k);
+                            $v_low = strtolower(trim($v));
+                            if (!isset($attrs_var[$k_low]) || strtolower(trim($attrs_var[$k_low])) !== $v_low) { $match = false; break; }
+                        }
+                        if ($match) { $vendas_destino = $var_vendas; break; }
+                    }
+                }
+            }
+
+            $attrs_assoc = $this->get_atributos_variacao($variacao_fabrica);
+            $attrs_for_front = array();
+            if (is_array($attrs_assoc) && !empty($attrs_assoc)) {
+                foreach ($attrs_assoc as $ak => $av) {
+                    // Nome amigável: remover underscores e capitalizar
+                    $nome = ucwords(str_replace('_', ' ', $ak));
+                    $attrs_for_front[] = array('nome' => $nome, 'valor' => $av);
+                }
+            }
+
+            $variacoes[] = array(
+                'id_fabrica'      => $variacao_id,
+                'id_destino'      => isset($variacao_destino['id']) ? $variacao_destino['id'] : null,
+                'sku'             => $variacao_fabrica->get_sku(),
+                'atributos'       => $attrs_for_front,
+                'preco_fabrica'   => $this->formatar_preco_produto($variacao_fabrica),
+                'preco_destino'   => $this->formatar_preco_variacao_destino($variacao_destino),
+                'estoque_fabrica' => ($variacao_fabrica->get_stock_quantity() !== null && $variacao_fabrica->get_stock_quantity() !== '') ? $variacao_fabrica->get_stock_quantity() : 0,
+                'estoque_destino' => (isset($variacao_destino['stock_quantity']) && $variacao_destino['stock_quantity'] !== null && $variacao_destino['stock_quantity'] !== '') ? $variacao_destino['stock_quantity'] : 0,
+                'vendas_fabrica'  => ($variacao_fabrica->get_total_sales() !== null && $variacao_fabrica->get_total_sales() !== '') ? $variacao_fabrica->get_total_sales() : 0,
+                'vendas_destino'  => $vendas_destino,
+                'status'          => $variacao_destino ? 'sincronizado' : 'não_sincronizado'
+            );
+            $idx_loop++;
+        }
+
         return $variacoes;
     }
-    
+
     /**
-     * Obter atributos de uma variação
+     * Retorna atributos normalizados de uma variação (nome -> valor)
+     * Aceita tanto arrays vindos da API quanto objetos WC_Product_Variation
      */
     private function get_atributos_variacao($variacao) {
-        $atributos = array();
-        
-        if (!$variacao || !method_exists($variacao, 'get_attributes')) {
-            return $atributos;
+        $attrs = array();
+        if (is_array($variacao) && isset($variacao['attributes'])) {
+            foreach ($variacao['attributes'] as $att) {
+                $name = isset($att['name']) ? strtolower(trim(str_replace('pa_', '', $att['name']))) : '';
+                $option = isset($att['option']) ? strtolower(trim($att['option'])) : '';
+                if ($name !== '') {
+                    $attrs[$name] = $option;
+                }
+            }
+        } elseif (is_object($variacao) && method_exists($variacao, 'get_attributes')) {
+            foreach ($variacao->get_attributes() as $name => $option) {
+                $name = strtolower(trim(str_replace('pa_', '', $name)));
+                $attrs[$name] = strtolower(trim($option));
+            }
         }
-        
-        $variation_attributes = $variacao->get_attributes();
-        
-        foreach ($variation_attributes as $attribute_name => $attribute_value) {
-            // Remover 'pa_' do nome se for atributo personalizado
-            $clean_name = str_replace('pa_', '', $attribute_name);
-            $clean_name = ucfirst(str_replace('_', ' ', $clean_name));
-            
-            $atributos[] = array(
-                'nome' => $clean_name,
-                'valor' => $attribute_value
-            );
-        }
-        
-        return $atributos;
-    }
-    
 
-    
+        return $attrs;
+    }
+
     /**
-     * Obter vendas do produto no destino (com cache)
+     * Normalizar um valor de atributo para matching: remove acentos, '-' vs ' ', caixa baixa e trim
      */
-    private function get_vendas_produto_destino_cached($lojista_data, $produto_id_destino) {
-        // DEBUG: temporariamente desabilitado o cache das vendas para debug
-        // $cache_key = 'vendas_destino_' . md5($lojista_data['url'] . '_' . $produto_id_destino);
-        // $cached_data = get_transient($cache_key);
-        
-        // if ($cached_data !== false && !isset($_POST['force_refresh'])) {
-        //     return $cached_data;
-        // }
-        
-        $vendas = $this->get_vendas_produto_destino($lojista_data, $produto_id_destino);
-        
-        $vendas_display = is_array($vendas) ? json_encode($vendas) : $vendas;
-
-        
-        // Cache por 1 minuto (vendas mudam menos)
-        // set_transient($cache_key, $vendas, 60);
-        
-        return $vendas;
+    private function normalizar_valor_atributo($valor) {
+        $v = is_array($valor) ? reset($valor) : $valor;
+        $v = (string)$v;
+        $v = strtolower(trim($v));
+        // substituir hifens por espaço e múltiplos espaços por um só
+        $v = preg_replace('/[-_]+/', ' ', $v);
+        $v = preg_replace('/\s+/', ' ', $v);
+        // remover acentos (basic)
+        $trans = array(
+            'á'=>'a','à'=>'a','ã'=>'a','â'=>'a','ä'=>'a',
+            'é'=>'e','è'=>'e','ê'=>'e','ë'=>'e',
+            'í'=>'i','ì'=>'i','î'=>'i','ï'=>'i',
+            'ó'=>'o','ò'=>'o','õ'=>'o','ô'=>'o','ö'=>'o',
+            'ú'=>'u','ù'=>'u','û'=>'u','ü'=>'u',
+            'ç'=>'c'
+        );
+        $v = strtr($v, $trans);
+        return $v;
     }
-    
-    /**
-     * Obter dados do produto no destino
-     */
-    private function get_produto_destino($lojista_data, $produto_id_destino) {
-        $url = trailingslashit($lojista_data['url']) . 'wp-json/wc/v3/products/' . $produto_id_destino;
-        
-        $response = wp_remote_get($url, array(
-            'timeout' => 15,
-            'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($lojista_data['consumer_key'] . ':' . $lojista_data['consumer_secret']),
-                'Content-Type' => 'application/json'
-            )
-        ));
-        
-        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
 
-            return false;
-        }
-        
-        $produto_data = json_decode(wp_remote_retrieve_body($response), true);
-        
-        // Log para debug do estoque
-        if ($produto_data) {
-
-        }
-        
-        return $produto_data;
-    }
-    
     /**
      * Obter estoque real do produto no destino
      */
@@ -3710,6 +3883,27 @@ class Sincronizador_WooCommerce {
         $fallback_result = $this->get_vendas_produto_destino_fallback($lojista_data, $produto_id_destino);
 
         return $fallback_result;
+    }
+
+    /**
+     * Wrapper com cache para get_vendas_produto_destino
+     */
+    private function get_vendas_produto_destino_cached($lojista_data, $produto_id_destino) {
+        // Gerar chave baseada no lojista (id ou url) e produto
+        $lojista_key = isset($lojista_data['id']) ? $lojista_data['id'] : md5($lojista_data['url'] ?? '');
+        $transient_key = 'sincr_vendas_' . md5($lojista_key . '_' . $produto_id_destino);
+
+        $cached = get_transient($transient_key);
+        if ($cached !== false) {
+            return $cached;
+        }
+
+        $result = $this->get_vendas_produto_destino($lojista_data, $produto_id_destino);
+
+        // Armazenar no cache por 5 minutos
+        set_transient($transient_key, $result, 300);
+
+        return $result;
     }
     
     /**
@@ -3899,21 +4093,41 @@ class Sincronizador_WooCommerce {
      * Obter variações do produto no destino
      */
     private function get_variacoes_destino($lojista_data, $produto_id_destino) {
-        $url = trailingslashit($lojista_data['url']) . 'wp-json/wc/v3/products/' . $produto_id_destino . '/variations';
-        
+        $base = rtrim($lojista_data['url'], '/') . '/';
+        $url = $base . 'wp-json/wc/v3/products/' . $produto_id_destino . '/variations?per_page=100';
+
+        // Tentar com autenticação básica (padrão)
         $response = wp_remote_get($url, array(
             'timeout' => 15,
             'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($lojista_data['consumer_key'] . ':' . $lojista_data['consumer_secret']),
+                'Authorization' => 'Basic ' . base64_encode(($lojista_data['consumer_key'] ?? '') . ':' . ($lojista_data['consumer_secret'] ?? '')),
                 'Content-Type' => 'application/json'
             )
         ));
-        
-        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
-            return array();
+
+        if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
+            $body = wp_remote_retrieve_body($response);
+            $decoded = json_decode($body, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
         }
-        
-        return json_decode(wp_remote_retrieve_body($response), true) ?: array();
+
+    // Se a chamada autenticada falhou, tentaremos uma chamada sem autenticação
+
+        // Fallback: tentar sem autenticação (algumas lojas expõem variações publicamente)
+        $response2 = wp_remote_get($url, array('timeout' => 15));
+        if (!is_wp_error($response2) && wp_remote_retrieve_response_code($response2) === 200) {
+            $body2 = wp_remote_retrieve_body($response2);
+            $decoded2 = json_decode($body2, true);
+            if (is_array($decoded2)) {
+                return $decoded2;
+            }
+        }
+
+    // fallback sem sucesso
+
+        return array();
     }
     
     /**

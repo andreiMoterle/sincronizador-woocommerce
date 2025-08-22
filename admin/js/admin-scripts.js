@@ -1177,6 +1177,7 @@
                                 <strong>📦 Estoque</strong><br>
                                 <small><strong>Fábrica:</strong> ${variacao.estoque_fabrica || 0}</small><br>
                                 <small><strong>Lojista:</strong> ${variacao.estoque_destino || 0}</small>
+                                ${typeof variacao.vendas_destino !== 'undefined' ? `<br><small><strong>Vendas (loja):</strong> ${variacao.vendas_destino}</small>` : ''}
                             </div>
                         </div>
                     </div>

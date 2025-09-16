@@ -16,27 +16,39 @@ $nonce = wp_create_nonce('sincronizador_wc_nonce');
     <h1><?php _e('Importar Produtos', 'sincronizador-wc'); ?></h1>
     
     <div class="sincronizador-import">
-        <!-- Formulário de Busca -->
-        <div class="search-form">
-            <form method="get" action="">
-                <input type="hidden" name="page" value="sincronizador-wc-importar">
-                <table class="form-table">
-                    <tr>
-                        <th scope="row">
-                            <label for="search"><?php _e('Buscar Produto', 'sincronizador-wc'); ?></label>
-                        </th>
-                        <td>
-                            <input type="text" id="search" name="search" 
-                                   value="<?php echo esc_attr($_GET['search'] ?? ''); ?>" 
-                                   placeholder="<?php _e('Nome do produto ou SKU', 'sincronizador-wc'); ?>"
-                                   class="regular-text">
-                            <input type="submit" class="button button-secondary" 
-                                   value="<?php _e('Buscar', 'sincronizador-wc'); ?>">
-                        </td>
-                    </tr>
-                </table>
-            </form>
+        <!-- Busca, filtro e paginação -->
+        <div class="search-form" style="display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap;">
+            <div>
+                <label for="buscar-produto"><strong><?php _e('Buscar Produto', 'sincronizador-wc'); ?></strong></label><br>
+                <input type="text" id="buscar-produto" placeholder="Nome ou SKU..." class="regular-text" style="min-width: 220px;">
+            </div>
+            <div>
+                <label for="filtro-categoria"><strong><?php _e('Categoria', 'sincronizador-wc'); ?></strong></label><br>
+                <select id="filtro-categoria" style="min-width: 180px;">
+                    <option value=""><?php _e('Todas as categorias', 'sincronizador-wc'); ?></option>
+                    <?php
+                    $categorias = get_terms(array('taxonomy' => 'product_cat', 'hide_empty' => false));
+                    foreach ($categorias as $cat): ?>
+                        <option value="<?php echo esc_attr($cat->slug); ?>"><?php echo esc_html($cat->name); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div>
+                <label for="tamanho-pagina"><strong><?php _e('Produtos por página', 'sincronizador-wc'); ?></strong></label><br>
+                <select id="tamanho-pagina" style="min-width: 100px;">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div>
+                <button type="button" class="button button-secondary" id="btn-carregar-produtos">🔄 Carregar Produtos</button>
+            </div>
         </div>
+        <div id="produtos-resumo" style="margin-top: 10px;"></div>
+        <div class="paginacao-produtos" style="margin: 15px 0;"></div>
+        <div id="produtos-grid" class="products-grid"></div>
         
         <!-- Resultados da Busca -->
         <?php if (!empty($products)): ?>

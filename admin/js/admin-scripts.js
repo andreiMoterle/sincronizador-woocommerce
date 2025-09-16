@@ -109,6 +109,32 @@
         setTimeout(() => {
             $("#incluir_variacoes, #incluir_imagens, #manter_precos").prop("checked", true);
         }, 100);
+
+        // Busca com debounce
+        let searchTimeout;
+        $(document).on('input', '#buscar-produto', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                carregarProdutos(1);
+            }, 300);
+        });
+
+        // Filtro de categoria
+        $(document).on('change', '#filtro-categoria', function() {
+            carregarProdutos(1);
+        });
+
+        // Paginação
+        $(document).on('click', '.paginacao-produtos a', function(e) {
+            e.preventDefault();
+            const pagina = $(this).data('pagina');
+            if (pagina) carregarProdutos(pagina);
+        });
+
+        // Tamanho da página
+        $(document).on('change', '#tamanho-pagina', function() {
+            carregarProdutos(1);
+        });
     }
 
     /**
@@ -662,50 +688,54 @@
         });
     }
 
-    function carregarProdutos() {
-        const btn = $("#btn-carregar-produtos");
-        
-        if (typeof SincronizadorModals !== 'undefined') {
-            SincronizadorModals.setButtonLoading(btn, true);
-        } else {
-            btn.prop('disabled', true).text('⏳ Carregando...');
-        }
-        
-        $.post(WC.ajaxurl, {
-            action: "sincronizador_wc_get_produtos_fabrica",
-            nonce: WC.nonce
-        })
-        .done(function(response) {
-            if (response.success) {
-                renderProdutos(response.data);
-                showImportSections();
-                
-                if (typeof SincronizadorModals !== 'undefined') {
-                    SincronizadorModals.showToast('✅ Produtos carregados com sucesso!', 'success');
-                }
+        function carregarProdutos(pagina = 1) {
+            const btn = $("#btn-carregar-produtos");
+            if (typeof SincronizadorModals !== 'undefined') {
+                SincronizadorModals.setButtonLoading(btn, true);
             } else {
-                if (typeof SincronizadorModals !== 'undefined') {
-                    SincronizadorModals.mostrarErro('Erro ao carregar produtos: ' + (response.data || 'Erro desconhecido'));
+                btn.prop('disabled', true).text('⏳ Carregando...');
+            }
+            const search = $('#buscar-produto').val() || '';
+            const categoria = $('#filtro-categoria').val() || '';
+            const tamanho_pagina = $('#tamanho-pagina').val() || 20;
+            $.post(WC.ajaxurl, {
+                action: "sincronizador_wc_get_produtos_fabrica",
+                nonce: WC.nonce,
+                search: search,
+                categoria: categoria,
+                pagina: pagina,
+                tamanho_pagina: tamanho_pagina
+            })
+            .done(function(response) {
+                if (response.success) {
+                    renderProdutos(response.data);
+                    showImportSections();
+                    if (typeof SincronizadorModals !== 'undefined') {
+                        SincronizadorModals.showToast('✅ Produtos carregados com sucesso!', 'success');
+                    }
                 } else {
-                    alert('Erro ao carregar produtos: ' + (response.data || 'Erro desconhecido'));
+                    if (typeof SincronizadorModals !== 'undefined') {
+                        SincronizadorModals.mostrarErro('Erro ao carregar produtos: ' + (response.data || 'Erro desconhecido'));
+                    } else {
+                        alert('Erro ao carregar produtos: ' + (response.data || 'Erro desconhecido'));
+                    }
                 }
-            }
-        })
-        .fail(function(xhr, status, error) {
-            if (typeof SincronizadorModals !== 'undefined') {
-                SincronizadorModals.mostrarErro('Erro de comunicação com o servidor');
-            } else {
-                alert('Erro de comunicação com o servidor');
-            }
-        })
-        .always(function() {
-            if (typeof SincronizadorModals !== 'undefined') {
-                SincronizadorModals.setButtonLoading(btn, false, '📋 Carregar Produtos');
-            } else {
-                btn.prop('disabled', false).text('📋 Carregar Produtos');
-            }
-        });
-    }
+            })
+            .fail(function(xhr, status, error) {
+                if (typeof SincronizadorModals !== 'undefined') {
+                    SincronizadorModals.mostrarErro('Erro de comunicação com o servidor');
+                } else {
+                    alert('Erro de comunicação com o servidor');
+                }
+            })
+            .always(function() {
+                if (typeof SincronizadorModals !== 'undefined') {
+                    SincronizadorModals.setButtonLoading(btn, false, '📋 Carregar Produtos');
+                } else {
+                    btn.prop('disabled', false).text('📋 Carregar Produtos');
+                }
+            });
+        }
 
     function iniciarImportacao() {
         const produtosSelecionados = [];

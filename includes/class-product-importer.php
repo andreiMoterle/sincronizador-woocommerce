@@ -420,12 +420,14 @@ class Sincronizador_WC_Product_Importer {
     
     public function ajax_get_produtos_fabrica() {
         check_ajax_referer('sincronizador_wc_nonce', 'nonce');
-        
         if (!current_user_can('manage_woocommerce')) {
             wp_die('Sem permissão');
         }
-        
-        $produtos = $this->get_produtos_fabrica();
+        $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
+        $categoria = isset($_POST['categoria']) ? sanitize_text_field($_POST['categoria']) : '';
+        $pagina = isset($_POST['pagina']) ? intval($_POST['pagina']) : 1;
+        $tamanho_pagina = isset($_POST['tamanho_pagina']) ? intval($_POST['tamanho_pagina']) : 20;
+        $produtos = $this->get_produtos_fabrica($search, $categoria, $pagina, $tamanho_pagina);
         wp_send_json_success($produtos);
     }
     
@@ -1203,36 +1205,47 @@ class Sincronizador_WC_Product_Importer {
         return false;
     }
     
-    private function get_produtos_fabrica() {
-        $args = array(
-            'post_type' => 'product',
-            'posts_per_page' => 50, // Limitar para performance
-            'post_status' => 'publish',
-            'meta_query' => array(
-                array(
-                    'key' => '_sku',
-                    'value' => '',
-                    'compare' => '!='
-                )
+    private function get_produtos_fabrica($search = '', $categoria = '', $pagina = 1, $tamanho_pagina = 20) {
+        $meta_query = array(
+            array(
+                'key' => '_sku',
+                'value' => '',
+                'compare' => '!='
             )
         );
-        
+        $tax_query = array();
+        if (!empty($categoria)) {
+            $tax_query[] = array(
+                'taxonomy' => 'product_cat',
+                'field' => 'slug',
+                'terms' => $categoria
+            );
+        }
+        $args = array(
+            'post_type' => 'product',
+            'posts_per_page' => $tamanho_pagina,
+            'paged' => $pagina,
+            'post_status' => 'publish',
+            'meta_query' => $meta_query
+        );
+        if (!empty($tax_query)) {
+            $args['tax_query'] = $tax_query;
+        }
+        if (!empty($search)) {
+            $args['s'] = $search;
+        }
         $query = new WP_Query($args);
         $produtos = array();
-        
+        $total = $query->found_posts;
         if ($query->have_posts()) {
             while ($query->have_posts()) {
                 $query->the_post();
                 $produto = wc_get_product(get_the_ID());
-                
                 if (!$produto) {
                     continue;
                 }
-                
-                // Obter categoria principal
                 $categories = wp_get_post_terms($produto->get_id(), 'product_cat');
                 $categoria_nome = !empty($categories) ? $categories[0]->name : 'Sem categoria';
-                
                 $produtos[] = array(
                     'id' => $produto->get_id(),
                     'nome' => $produto->get_name(),
@@ -1246,8 +1259,12 @@ class Sincronizador_WC_Product_Importer {
             }
             wp_reset_postdata();
         }
-        
-        return $produtos;
+        return array(
+            'produtos' => $produtos,
+            'total' => $total,
+            'pagina' => $pagina,
+            'tamanho_pagina' => $tamanho_pagina
+        );
     }
     
     private function salvar_historico_importacao($lojista_nome, $sucessos, $erros, $logs) {

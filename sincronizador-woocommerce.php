@@ -669,7 +669,9 @@ class Sincronizador_WooCommerce {
         
 
         
-        return $resultados; // Retornar array com detalhes de cada produto
+    // Atualizar data/hora da última sincronização do lojista
+    $this->atualizar_data_sync($lojista['id']);
+    return $resultados; // Retornar array com detalhes de cada produto
     }
     
     /**
